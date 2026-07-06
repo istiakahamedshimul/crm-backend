@@ -1,4 +1,4 @@
-name: Deploy Admin Angular
+name: Deploy Backend
 
 on:
   workflow_dispatch:
@@ -11,51 +11,64 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Angular code
+      - name: Checkout backend code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js 20
-        uses: actions/setup-node@v4
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          dotnet-version: '9.0.x'
 
-      - name: Install dependencies
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install
-          fi
-
-      - name: Build Angular production
-        run: |
-          npm run build -- --configuration production
-
-      - name: Find Angular build folder
-        id: find_dist
+      - name: Find backend project file
+        id: find_project
         shell: bash
         run: |
-          BUILD_DIR=$(find dist -type f -name "index.html" -printf '%h\n' | head -n 1)
+          PROJECT_FILE=$(find . -name "*.csproj" | head -n 1)
 
-          if [ -z "$BUILD_DIR" ]; then
-            echo "Angular build output not found. No index.html inside dist."
+          if [ -z "$PROJECT_FILE" ]; then
+            echo "No .csproj file found"
             exit 1
           fi
 
-          echo "Using build folder: $BUILD_DIR"
-          echo "build_dir=$BUILD_DIR" >> $GITHUB_OUTPUT
+          echo "Using project file: $PROJECT_FILE"
+          echo "project_file=$PROJECT_FILE" >> $GITHUB_OUTPUT
 
-      - name: Prepare deploy folder
+      - name: Restore backend
         shell: bash
         run: |
-          rm -rf deploy
-          mkdir -p deploy
-          cp -r "${{ steps.find_dist.outputs.build_dir }}/"* deploy/
-          echo "Deploy folder content:"
-          ls -la deploy
+          dotnet restore "${{ steps.find_project.outputs.project_file }}"
 
-      - name: Prepare temporary frontend folder on VPS
+      - name: Publish backend
+        shell: bash
+        run: |
+          PROJECT_FILE="${{ steps.find_project.outputs.project_file }}"
+          PROJECT_NAME=$(basename "$PROJECT_FILE" .csproj)
+
+          echo "Publishing project: $PROJECT_FILE"
+          echo "Project name: $PROJECT_NAME"
+
+          dotnet publish "$PROJECT_FILE" -c Release -o ./publish --no-restore
+
+          echo "Creating app.dll for systemd service..."
+
+          if [ -f "./publish/$PROJECT_NAME.dll" ]; then
+            cp "./publish/$PROJECT_NAME.dll" "./publish/app.dll"
+          else
+            MAIN_DLL=$(find ./publish -maxdepth 1 -name "*.dll" | head -n 1)
+
+            if [ -z "$MAIN_DLL" ]; then
+              echo "No DLL found in publish folder"
+              exit 1
+            fi
+
+            echo "Using main DLL: $MAIN_DLL"
+            cp "$MAIN_DLL" "./publish/app.dll"
+          fi
+
+          echo "Publish folder:"
+          ls -la ./publish
+
+      - name: Prepare temporary upload folder on VPS
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SERVER_IP }}
@@ -63,23 +76,23 @@ jobs:
           password: ${{ secrets.SERVER_PASS }}
           port: ${{ secrets.SERVER_PORT }}
           script: |
-            echo "Preparing temporary Angular upload folder..."
-            rm -rf /tmp/crm-admin-upload
-            mkdir -p /tmp/crm-admin-upload
-            chmod 777 /tmp/crm-admin-upload
+            echo "Preparing temporary upload folder..."
+            rm -rf /tmp/crm-backend-upload
+            mkdir -p /tmp/crm-backend-upload
+            chmod 777 /tmp/crm-backend-upload
 
-      - name: Upload Angular files to VPS temporary folder
+      - name: Upload backend files to temporary folder
         uses: appleboy/scp-action@v1
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_PASS }}
           port: ${{ secrets.SERVER_PORT }}
-          source: "./deploy/*"
-          target: "/tmp/crm-admin-upload"
+          source: "./publish/*"
+          target: "/tmp/crm-backend-upload"
           strip_components: 1
 
-      - name: Move Angular files and reload Nginx
+      - name: Move backend files and restart service
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SERVER_IP }}
@@ -87,22 +100,34 @@ jobs:
           password: ${{ secrets.SERVER_PASS }}
           port: ${{ secrets.SERVER_PORT }}
           script: |
-            echo "Preparing frontend folder..."
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S mkdir -p /var/www/crm-admin
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S rm -rf /var/www/crm-admin/*
+            echo "Stopping backend service..."
+            echo "${{ secrets.SERVER_PASS }}" | sudo -S systemctl stop crm-backend || true
 
-            echo "Copying Angular files..."
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S cp -a /tmp/crm-admin-upload/. /var/www/crm-admin/
+            echo "Preparing backend folder..."
+            echo "${{ secrets.SERVER_PASS }}" | sudo -S mkdir -p /var/www/crm-backend
+            echo "${{ secrets.SERVER_PASS }}" | sudo -S rm -rf /var/www/crm-backend/*
 
-            echo "Fixing permissions..."
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S chown -R www-data:www-data /var/www/crm-admin
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S chmod -R 775 /var/www/crm-admin
+            echo "Copying uploaded files to backend folder..."
+            echo "${{ secrets.SERVER_PASS }}" | sudo -S cp -a /tmp/crm-backend-upload/. /var/www/crm-backend/
 
-            echo "Testing Nginx..."
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S nginx -t
+            echo "Fixing backend permissions..."
+            echo "${{ secrets.SERVER_PASS }}" | sudo -S chown -R www-data:www-data /var/www/crm-backend
+            echo "${{ secrets.SERVER_PASS }}" | sudo -S chmod -R 775 /var/www/crm-backend
 
-            echo "Reloading Nginx..."
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S systemctl reload nginx
+            echo "Restarting backend service..."
+            echo "${{ secrets.SERVER_PASS }}" | sudo -S systemctl restart crm-backend
 
-            echo "Angular deployed successfully."
-            ls -la /var/www/crm-admin | head
+            echo "Waiting for backend..."
+            sleep 5
+
+            echo "Backend service status:"
+            echo "${{ secrets.SERVER_PASS }}" | sudo -S systemctl status crm-backend --no-pager
+
+            echo "Checking backend internal port 5050:"
+            echo "${{ secrets.SERVER_PASS }}" | sudo -S ss -tulpn | grep ':5050' || true
+
+            echo "Checking Nginx public API port 5000:"
+            echo "${{ secrets.SERVER_PASS }}" | sudo -S ss -tulpn | grep ':5000' || true
+
+            echo "Testing backend API:"
+            curl -s http://127.0.0.1:5050/api || true
