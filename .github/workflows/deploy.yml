@@ -1,6 +1,7 @@
 name: Deploy Backend
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -68,7 +69,7 @@ jobs:
           ls -la ./publish
 
       - name: Copy backend files to VPS
-        uses: appleboy/scp-action@v0.1.7
+        uses: appleboy/scp-action@v1
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
@@ -80,7 +81,7 @@ jobs:
           rm: true
 
       - name: Restart backend service
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
@@ -88,20 +89,20 @@ jobs:
           port: ${{ secrets.SERVER_PORT }}
           script: |
             echo "Fixing backend permissions..."
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S chown -R www-data:www-data /var/www/crm-backend
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S chmod -R 775 /var/www/crm-backend
+            sudo chown -R www-data:www-data /var/www/crm-backend
+            sudo chmod -R 775 /var/www/crm-backend
 
             echo "Restarting backend service..."
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S systemctl restart crm-backend
+            sudo systemctl restart crm-backend
 
             echo "Waiting for backend..."
             sleep 5
 
             echo "Backend service status:"
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S systemctl status crm-backend --no-pager
+            sudo systemctl status crm-backend --no-pager
 
             echo "Checking backend internal port 5050:"
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S ss -tulpn | grep ':5050' || true
+            sudo ss -tulpn | grep ':5050' || true
 
             echo "Checking Nginx public API port 5000:"
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S ss -tulpn | grep ':5000' || true
+            sudo ss -tulpn | grep ':5000' || true
