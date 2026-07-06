@@ -30,8 +30,13 @@ jobs:
             exit 1
           fi
 
+          PROJECT_NAME=$(basename "$PROJECT_FILE" .csproj)
+
           echo "Using project file: $PROJECT_FILE"
+          echo "Project name: $PROJECT_NAME"
+
           echo "project_file=$PROJECT_FILE" >> $GITHUB_OUTPUT
+          echo "project_name=$PROJECT_NAME" >> $GITHUB_OUTPUT
 
       - name: Restore backend
         shell: bash
@@ -42,31 +47,20 @@ jobs:
         shell: bash
         run: |
           PROJECT_FILE="${{ steps.find_project.outputs.project_file }}"
-          PROJECT_NAME=$(basename "$PROJECT_FILE" .csproj)
+          PROJECT_NAME="${{ steps.find_project.outputs.project_name }}"
 
           echo "Publishing project: $PROJECT_FILE"
           echo "Project name: $PROJECT_NAME"
 
           dotnet publish "$PROJECT_FILE" -c Release -o ./publish --no-restore
 
-          echo "Creating app.dll for systemd service..."
-
-          if [ -f "./publish/$PROJECT_NAME.dll" ]; then
-            cp "./publish/$PROJECT_NAME.dll" "./publish/app.dll"
-          else
-            MAIN_DLL=$(find ./publish -maxdepth 1 -name "*.dll" | head -n 1)
-
-            if [ -z "$MAIN_DLL" ]; then
-              echo "No DLL found in publish folder"
-              exit 1
-            fi
-
-            echo "Using main DLL: $MAIN_DLL"
-            cp "$MAIN_DLL" "./publish/app.dll"
-          fi
+          echo "$PROJECT_NAME" > ./publish/project_name.txt
 
           echo "Publish folder:"
           ls -la ./publish
+
+          echo "Checking required runtime files:"
+          ls -la ./publish | grep -E "$PROJECT_NAME.dll|$PROJECT_NAME.runtimeconfig.json|$PROJECT_NAME.deps.json"
 
       - name: Prepare temporary upload folder on VPS
         uses: appleboy/ssh-action@v1
@@ -100,6 +94,8 @@ jobs:
           password: ${{ secrets.SERVER_PASS }}
           port: ${{ secrets.SERVER_PORT }}
           script: |
+            set -e
+
             echo "Stopping backend service..."
             echo "${{ secrets.SERVER_PASS }}" | sudo -S systemctl stop crm-backend || true
 
@@ -110,18 +106,70 @@ jobs:
             echo "Copying uploaded files to backend folder..."
             echo "${{ secrets.SERVER_PASS }}" | sudo -S cp -a /tmp/crm-backend-upload/. /var/www/crm-backend/
 
+            echo "Reading project name..."
+            PROJECT_NAME=$(cat /tmp/crm-backend-upload/project_name.txt)
+            echo "Project name is: $PROJECT_NAME"
+
+            echo "Creating correct backend environment file..."
+            echo "${{ secrets.SERVER_PASS }}" | sudo -S tee /etc/crm-backend.env > /dev/null <<EOF
+            ASPNETCORE_ENVIRONMENT=Production
+            ASPNETCORE_URLS=http://127.0.0.1:5050
+            ConnectionStrings__Default=Server=localhost;Port=3306;Database=real_estate_crm;User=crmuser;Password=${{ secrets.SERVER_PASS }};AllowPublicKeyRetrieval=true;
+            ConnectionStrings__DefaultConnection=Server=localhost;Port=3306;Database=real_estate_crm;User=crmuser;Password=${{ secrets.SERVER_PASS }};AllowPublicKeyRetrieval=true;
+            Jwt__Issuer=RealEstateCrm
+            Jwt__Audience=RealEstateCrmClients
+            Jwt__Secret=change-this-dev-secret-before-production-please
+            Jwt__Key=CHANGE_THIS_TO_A_LONG_RANDOM_SECRET_KEY_MIN_32_CHARS
+            Jwt__ExpiryMinutes=1440
+            EOF
+
+            echo "${{ secrets.SERVER_PASS }}" | sudo -S chmod 600 /etc/crm-backend.env
+            echo "${{ secrets.SERVER_PASS }}" | sudo -S chown root:root /etc/crm-backend.env
+
+            echo "Creating correct systemd service..."
+            echo "${{ secrets.SERVER_PASS }}" | sudo -S tee /etc/systemd/system/crm-backend.service > /dev/null <<EOF
+            [Unit]
+            Description=CrmServer ASP.NET Core Backend
+            After=network.target mysql.service
+
+            [Service]
+            WorkingDirectory=/var/www/crm-backend
+            ExecStart=/usr/bin/dotnet /var/www/crm-backend/${PROJECT_NAME}.dll
+            Restart=always
+            RestartSec=10
+            KillSignal=SIGINT
+            SyslogIdentifier=crm-backend
+            User=www-data
+            EnvironmentFile=/etc/crm-backend.env
+            Environment=DOTNET_PRINT_TELEMETRY_MESSAGE=false
+
+            [Install]
+            WantedBy=multi-user.target
+            EOF
+
+            echo "Ensuring MySQL database and user exist..."
+            echo "${{ secrets.SERVER_PASS }}" | sudo -S mysql -e "CREATE DATABASE IF NOT EXISTS real_estate_crm CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+            echo "${{ secrets.SERVER_PASS }}" | sudo -S mysql -e "CREATE USER IF NOT EXISTS 'crmuser'@'localhost' IDENTIFIED BY '${{ secrets.SERVER_PASS }}';"
+            echo "${{ secrets.SERVER_PASS }}" | sudo -S mysql -e "ALTER USER 'crmuser'@'localhost' IDENTIFIED BY '${{ secrets.SERVER_PASS }}';"
+            echo "${{ secrets.SERVER_PASS }}" | sudo -S mysql -e "GRANT ALL PRIVILEGES ON real_estate_crm.* TO 'crmuser'@'localhost';"
+            echo "${{ secrets.SERVER_PASS }}" | sudo -S mysql -e "FLUSH PRIVILEGES;"
+
             echo "Fixing backend permissions..."
             echo "${{ secrets.SERVER_PASS }}" | sudo -S chown -R www-data:www-data /var/www/crm-backend
             echo "${{ secrets.SERVER_PASS }}" | sudo -S chmod -R 775 /var/www/crm-backend
+
+            echo "Reloading systemd..."
+            echo "${{ secrets.SERVER_PASS }}" | sudo -S systemctl daemon-reload
+            echo "${{ secrets.SERVER_PASS }}" | sudo -S systemctl enable crm-backend
 
             echo "Restarting backend service..."
             echo "${{ secrets.SERVER_PASS }}" | sudo -S systemctl restart crm-backend
 
             echo "Waiting for backend..."
-            sleep 5
+            sleep 8
 
             echo "Backend service status:"
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S systemctl status crm-backend --no-pager
+            echo "${{ secrets.SERVER_PASS }}" | sudo -S systemctl status crm-backend --no-pager || true
 
             echo "Checking backend internal port 5050:"
             echo "${{ secrets.SERVER_PASS }}" | sudo -S ss -tulpn | grep ':5050' || true
@@ -129,5 +177,11 @@ jobs:
             echo "Checking Nginx public API port 5000:"
             echo "${{ secrets.SERVER_PASS }}" | sudo -S ss -tulpn | grep ':5000' || true
 
-            echo "Testing backend API:"
-            curl -s http://127.0.0.1:5050/api || true
+            echo "Testing backend API locally:"
+            curl -i http://127.0.0.1:5050/api || true
+
+            echo "Testing backend API through Nginx:"
+            curl -i http://127.0.0.1:5000/api || true
+
+            echo "Last backend logs:"
+            echo "${{ secrets.SERVER_PASS }}" | sudo -S journalctl -u crm-backend -n 40 --no-pager || true
