@@ -3,6 +3,12 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace backend.Controllers;
 
+public class UploadRequest
+{
+    public IFormFile File { get; set; } = null!;
+    public string Category { get; set; } = "proofs";
+}
+
 [ApiController]
 [Authorize]
 [Route("api/files")]
@@ -16,8 +22,12 @@ public class FilesController(IWebHostEnvironment environment) : ControllerBase
 
     [HttpPost("upload")]
     [RequestSizeLimit(10_000_000)]
-    public async Task<ActionResult> Upload([FromForm] IFormFile file, [FromForm] string category = "proofs")
+    [Consumes("multipart/form-data")]
+    public async Task<ActionResult> Upload([FromForm] UploadRequest request)
     {
+        var file = request.File;
+        var category = request.Category;
+
         if (file.Length == 0)
         {
             return BadRequest(new { message = "File is required." });
