@@ -2,14 +2,15 @@ name: Deploy Backend
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout backend code
         uses: actions/checkout@v4
 
       - name: Setup .NET 9
@@ -17,15 +18,62 @@ jobs:
         with:
           dotnet-version: '9.0.x'
 
-      - name: Publish
-        run: dotnet publish -c Release -o ./publish
+      - name: Find backend project file
+        id: find_project
+        shell: bash
+        run: |
+          PROJECT_FILE=$(find . -name "*.csproj" | head -n 1)
 
-      - name: Copy files to VPS
+          if [ -z "$PROJECT_FILE" ]; then
+            echo "No .csproj file found"
+            exit 1
+          fi
+
+          echo "Using project file: $PROJECT_FILE"
+          echo "project_file=$PROJECT_FILE" >> $GITHUB_OUTPUT
+
+      - name: Restore backend
+        shell: bash
+        run: |
+          dotnet restore "${{ steps.find_project.outputs.project_file }}"
+
+      - name: Publish backend
+        shell: bash
+        run: |
+          PROJECT_FILE="${{ steps.find_project.outputs.project_file }}"
+          PROJECT_NAME=$(basename "$PROJECT_FILE" .csproj)
+
+          echo "Publishing project: $PROJECT_FILE"
+          echo "Project name: $PROJECT_NAME"
+
+          dotnet publish "$PROJECT_FILE" -c Release -o ./publish --no-restore
+
+          echo "Creating app.dll for systemd service..."
+
+          if [ -f "./publish/$PROJECT_NAME.dll" ]; then
+            cp "./publish/$PROJECT_NAME.dll" "./publish/app.dll"
+          else
+            MAIN_DLL=$(find ./publish -maxdepth 1 -name "*.dll" | head -n 1)
+
+            if [ -z "$MAIN_DLL" ]; then
+              echo "No DLL found in publish folder"
+              exit 1
+            fi
+
+            echo "Using main DLL: $MAIN_DLL"
+            cp "$MAIN_DLL" "./publish/app.dll"
+          fi
+
+          echo "Publish folder:"
+          ls -la ./publish
+
+      - name: Copy backend files to VPS
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SERVER_IP }}
-          username: deployer
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASS }}
+          port: ${{ secrets.SERVER_PORT }}
           source: "./publish/*"
           target: "/var/www/crm-backend"
           strip_components: 1
@@ -35,9 +83,25 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_IP }}
-          username: deployer
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASS }}
+          port: ${{ secrets.SERVER_PORT }}
           script: |
-            sudo systemctl restart crm-backend
-            sleep 3
-            sudo systemctl status crm-backend --no-pager
+            echo "Fixing backend permissions..."
+            echo "${{ secrets.SERVER_PASS }}" | sudo -S chown -R www-data:www-data /var/www/crm-backend
+            echo "${{ secrets.SERVER_PASS }}" | sudo -S chmod -R 775 /var/www/crm-backend
+
+            echo "Restarting backend service..."
+            echo "${{ secrets.SERVER_PASS }}" | sudo -S systemctl restart crm-backend
+
+            echo "Waiting for backend..."
+            sleep 5
+
+            echo "Backend service status:"
+            echo "${{ secrets.SERVER_PASS }}" | sudo -S systemctl status crm-backend --no-pager
+
+            echo "Checking backend internal port 5050:"
+            echo "${{ secrets.SERVER_PASS }}" | sudo -S ss -tulpn | grep ':5050' || true
+
+            echo "Checking Nginx public API port 5000:"
+            echo "${{ secrets.SERVER_PASS }}" | sudo -S ss -tulpn | grep ':5000' || true
