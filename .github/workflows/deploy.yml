@@ -44,12 +44,7 @@ jobs:
           PROJECT_FILE="${{ steps.find_project.outputs.project_file }}"
           PROJECT_NAME=$(basename "$PROJECT_FILE" .csproj)
 
-          echo "Publishing project: $PROJECT_FILE"
-          echo "Project name: $PROJECT_NAME"
-
           dotnet publish "$PROJECT_FILE" -c Release -o ./publish --no-restore
-
-          echo "Creating app.dll for systemd service..."
 
           if [ -f "./publish/$PROJECT_NAME.dll" ]; then
             cp "./publish/$PROJECT_NAME.dll" "./publish/app.dll"
@@ -61,12 +56,25 @@ jobs:
               exit 1
             fi
 
-            echo "Using main DLL: $MAIN_DLL"
             cp "$MAIN_DLL" "./publish/app.dll"
           fi
 
-          echo "Publish folder:"
           ls -la ./publish
+
+      - name: Prepare backend folder on VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASS }}
+          port: ${{ secrets.SERVER_PORT }}
+          script: |
+            echo "Preparing backend folder..."
+            sudo systemctl stop crm-backend || true
+            sudo mkdir -p /var/www/crm-backend
+            sudo rm -rf /var/www/crm-backend/*
+            sudo chown -R deployer:www-data /var/www/crm-backend
+            sudo chmod -R 775 /var/www/crm-backend
 
       - name: Copy backend files to VPS
         uses: appleboy/scp-action@v1
@@ -78,7 +86,6 @@ jobs:
           source: "./publish/*"
           target: "/var/www/crm-backend"
           strip_components: 1
-          rm: true
 
       - name: Restart backend service
         uses: appleboy/ssh-action@v1
