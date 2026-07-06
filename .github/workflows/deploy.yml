@@ -44,7 +44,12 @@ jobs:
           PROJECT_FILE="${{ steps.find_project.outputs.project_file }}"
           PROJECT_NAME=$(basename "$PROJECT_FILE" .csproj)
 
+          echo "Publishing project: $PROJECT_FILE"
+          echo "Project name: $PROJECT_NAME"
+
           dotnet publish "$PROJECT_FILE" -c Release -o ./publish --no-restore
+
+          echo "Creating app.dll for systemd service..."
 
           if [ -f "./publish/$PROJECT_NAME.dll" ]; then
             cp "./publish/$PROJECT_NAME.dll" "./publish/app.dll"
@@ -56,12 +61,14 @@ jobs:
               exit 1
             fi
 
+            echo "Using main DLL: $MAIN_DLL"
             cp "$MAIN_DLL" "./publish/app.dll"
           fi
 
+          echo "Publish folder:"
           ls -la ./publish
 
-      - name: Prepare backend folder on VPS
+      - name: Prepare temporary upload folder on VPS
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SERVER_IP }}
@@ -69,14 +76,11 @@ jobs:
           password: ${{ secrets.SERVER_PASS }}
           port: ${{ secrets.SERVER_PORT }}
           script: |
-            echo "Preparing backend folder..."
-            sudo systemctl stop crm-backend || true
-            sudo mkdir -p /var/www/crm-backend
-            sudo rm -rf /var/www/crm-backend/*
-            sudo chown -R deployer:www-data /var/www/crm-backend
-            sudo chmod -R 775 /var/www/crm-backend
+            echo "Preparing temporary upload folder..."
+            rm -rf /home/deployer/crm-backend-upload
+            mkdir -p /home/deployer/crm-backend-upload
 
-      - name: Copy backend files to VPS
+      - name: Upload backend files to temporary folder
         uses: appleboy/scp-action@v1
         with:
           host: ${{ secrets.SERVER_IP }}
@@ -84,10 +88,10 @@ jobs:
           password: ${{ secrets.SERVER_PASS }}
           port: ${{ secrets.SERVER_PORT }}
           source: "./publish/*"
-          target: "/var/www/crm-backend"
+          target: "/home/deployer/crm-backend-upload"
           strip_components: 1
 
-      - name: Restart backend service
+      - name: Move backend files and restart service
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SERVER_IP }}
@@ -95,6 +99,16 @@ jobs:
           password: ${{ secrets.SERVER_PASS }}
           port: ${{ secrets.SERVER_PORT }}
           script: |
+            echo "Stopping backend service..."
+            sudo systemctl stop crm-backend || true
+
+            echo "Preparing backend folder..."
+            sudo mkdir -p /var/www/crm-backend
+            sudo rm -rf /var/www/crm-backend/*
+
+            echo "Copying uploaded files to backend folder..."
+            sudo rsync -a /home/deployer/crm-backend-upload/ /var/www/crm-backend/
+
             echo "Fixing backend permissions..."
             sudo chown -R www-data:www-data /var/www/crm-backend
             sudo chmod -R 775 /var/www/crm-backend
@@ -113,3 +127,6 @@ jobs:
 
             echo "Checking Nginx public API port 5000:"
             sudo ss -tulpn | grep ':5000' || true
+
+            echo "Testing backend API:"
+            curl -s http://127.0.0.1:5050/api || true
