@@ -88,7 +88,7 @@ jobs:
           port: ${{ secrets.SERVER_PORT }}
           script: |
             echo "Fixing backend permissions..."
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S chown -R www-data:www-data /var/www/crm-backend
+            echo "${{ secrets.SERVER_PASS }}" | sudo -S chown -R ${{ secrets.SERVER_USER }}:${{ secrets.SERVER_USER }} /var/www/crm-backend
             echo "${{ secrets.SERVER_PASS }}" | sudo -S chmod -R 775 /var/www/crm-backend
 
             echo "Restarting backend service..."
