@@ -13,7 +13,6 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options) : DbContext(op
     public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<SubGroup> SubGroups => Set<SubGroup>();
-    public DbSet<PropertyUnit> PropertyUnits => Set<PropertyUnit>();
     public DbSet<Invoice> Invoices => Set<Invoice>();
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<Commission> Commissions => Set<Commission>();

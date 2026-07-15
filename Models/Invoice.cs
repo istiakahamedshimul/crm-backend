@@ -7,8 +7,6 @@ public class Invoice
     public Customer Customer { get; set; } = null!;
     public int? ProjectId { get; set; }
     public Project? Project { get; set; }
-    public int? UnitId { get; set; }
-    public PropertyUnit? Unit { get; set; }
     public int SalesExecutiveId { get; set; }
     public User SalesExecutive { get; set; } = null!;
     public string InvoiceNumber { get; set; } = "";

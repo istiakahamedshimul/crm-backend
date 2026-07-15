@@ -272,9 +272,6 @@ namespace backend.Migrations
                     b.Property<decimal>("Tax")
                         .HasColumnType("decimal(65,30)");
 
-                    b.Property<int?>("UnitId")
-                        .HasColumnType("int");
-
                     b.HasKey("Id");
 
                     b.HasIndex("CustomerId");
@@ -287,8 +284,6 @@ namespace backend.Migrations
                     b.HasIndex("ProjectId");
 
                     b.HasIndex("SalesExecutiveId");
-
-                    b.HasIndex("UnitId");
 
                     b.ToTable("Invoices");
                 });
@@ -464,58 +459,6 @@ namespace backend.Migrations
                     b.HasIndex("SubGroupId");
 
                     b.ToTable("Projects");
-                });
-
-            modelBuilder.Entity("backend.Models.PropertyUnit", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<decimal>("BasePrice")
-                        .HasColumnType("decimal(65,30)");
-
-                    b.Property<int?>("Bathrooms")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("Bedrooms")
-                        .HasColumnType("int");
-
-                    b.Property<decimal>("BookingMoney")
-                        .HasColumnType("decimal(65,30)");
-
-                    b.Property<string>("FacingDirection")
-                        .HasColumnType("longtext");
-
-                    b.Property<decimal>("FinalPrice")
-                        .HasColumnType("decimal(65,30)");
-
-                    b.Property<int?>("FloorNumber")
-                        .HasColumnType("int");
-
-                    b.Property<int>("ProjectId")
-                        .HasColumnType("int");
-
-                    b.Property<decimal>("SizeSqft")
-                        .HasColumnType("decimal(65,30)");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("int");
-
-                    b.Property<string>("TowerOrBlock")
-                        .HasColumnType("longtext");
-
-                    b.Property<string>("UnitNumber")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ProjectId");
-
-                    b.ToTable("PropertyUnits");
                 });
 
             modelBuilder.Entity("backend.Models.Role", b =>
@@ -713,10 +656,6 @@ namespace backend.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("backend.Models.PropertyUnit", "Unit")
-                        .WithMany()
-                        .HasForeignKey("UnitId");
-
                     b.Navigation("Customer");
 
                     b.Navigation("GeneratedBy");
@@ -724,8 +663,6 @@ namespace backend.Migrations
                     b.Navigation("Project");
 
                     b.Navigation("SalesExecutive");
-
-                    b.Navigation("Unit");
                 });
 
             modelBuilder.Entity("backend.Models.Lead", b =>
@@ -794,17 +731,6 @@ namespace backend.Migrations
                         .IsRequired();
 
                     b.Navigation("SubGroup");
-                });
-
-            modelBuilder.Entity("backend.Models.PropertyUnit", b =>
-                {
-                    b.HasOne("backend.Models.Project", "Project")
-                        .WithMany()
-                        .HasForeignKey("ProjectId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Project");
                 });
 
             modelBuilder.Entity("backend.Models.User", b =>
