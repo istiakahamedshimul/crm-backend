@@ -44,7 +44,6 @@ public class InvoicesController(CrmDbContext db) : ControllerBase
         {
             CustomerId = request.CustomerId,
             ProjectId = request.ProjectId,
-            UnitId = request.UnitId,
             SalesExecutiveId = request.SalesExecutiveId ?? customer.AssignedToId ?? User.UserId(),
             InvoiceNumber = $"INV-{DateTime.UtcNow:yyyyMMddHHmmss}",
             DueDate = request.DueDate,
