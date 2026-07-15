@@ -17,6 +17,7 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options) : DbContext(op
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<Commission> Commissions => Set<Commission>();
     public DbSet<CommissionRule> CommissionRules => Set<CommissionRule>();
+    public DbSet<VehicleBooking> VehicleBookings => Set<VehicleBooking>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -30,5 +31,7 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options) : DbContext(op
         modelBuilder.Entity<Customer>().HasOne(x => x.Lead).WithMany().HasForeignKey(x => x.LeadId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<Commission>().HasOne(x => x.Payment).WithMany().HasForeignKey(x => x.PaymentId);
         modelBuilder.Entity<Payment>().HasOne(x => x.VerifiedBy).WithMany().HasForeignKey(x => x.VerifiedById).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<VehicleBooking>().HasOne(x => x.SalesExecutive).WithMany().HasForeignKey(x => x.SalesExecutiveId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<VehicleBooking>().HasOne(x => x.ReviewedBy).WithMany().HasForeignKey(x => x.ReviewedById).OnDelete(DeleteBehavior.Restrict);
     }
 }
