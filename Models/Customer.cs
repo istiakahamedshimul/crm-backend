@@ -16,6 +16,8 @@ public class Customer
     public Lead? Lead { get; set; }
     public int? AssignedToId { get; set; }
     public User? AssignedTo { get; set; }
+    public int? ProjectId { get; set; }
+    public Project? Project { get; set; }
     public string PaymentStatus { get; set; } = "Unpaid";
     public string DocumentStatus { get; set; } = "Pending";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

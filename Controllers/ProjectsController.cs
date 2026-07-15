@@ -16,16 +16,17 @@ public class ProjectsController(CrmDbContext db) : ControllerBase
     [HttpGet]
     public async Task<ActionResult> GetProjects()
     {
-        var projects = await db.Projects.Include(x => x.Units)
+        var projects = await db.Projects.Include(x => x.SubGroup)
             .Select(x => new
             {
                 x.Id,
                 x.Name,
+                x.SubGroupId,
+                SubGroup = x.SubGroup.Name,
+                x.SubGroup.CompanyName,
                 x.Type,
                 x.Location,
-                x.Status,
-                TotalUnits = x.Units.Count,
-                AvailableUnits = x.Units.Count(u => u.Status == UnitStatus.Available)
+                x.Status
             })
             .ToListAsync();
 
@@ -36,9 +37,13 @@ public class ProjectsController(CrmDbContext db) : ControllerBase
     [Authorize(Roles = "SuperAdmin,Admin")]
     public async Task<ActionResult> CreateProject(CreateProjectRequest request)
     {
+        if (!await db.SubGroups.AnyAsync(x => x.Id == request.SubGroupId))
+            return BadRequest(new { message = "Subgroup not found." });
+
         var project = new Project
         {
             Name = request.Name,
+            SubGroupId = request.SubGroupId,
             Type = request.Type,
             Location = request.Location,
             Address = request.Address,

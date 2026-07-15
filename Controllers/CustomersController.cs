@@ -18,7 +18,7 @@ public class CustomersController(CrmDbContext db, ILeadAssignmentService assignm
     [HttpGet]
     public async Task<ActionResult> GetCustomers()
     {
-        var query = db.Customers.Include(x => x.AssignedTo).AsQueryable();
+        var query = db.Customers.Include(x => x.AssignedTo).Include(x => x.Project).ThenInclude(x => x!.SubGroup).AsQueryable();
         if (User.IsInRole("SalesExecutive")) query = query.Where(x => x.AssignedToId == User.UserId());
 
         var customers = await query.Select(x => new
@@ -29,10 +29,29 @@ public class CustomersController(CrmDbContext db, ILeadAssignmentService assignm
             x.Phone,
             x.Email,
             x.PaymentStatus,
+            x.ProjectId,
+            Project = x.Project == null ? null : x.Project.Name,
+            ProjectType = x.Project == null ? (ProjectType?)null : x.Project.Type,
+            SubGroupId = x.Project == null ? (int?)null : x.Project.SubGroupId,
+            SubGroup = x.Project == null ? null : x.Project.SubGroup.Name,
             SalesExecutive = x.AssignedTo == null ? null : x.AssignedTo.FullName
         }).ToListAsync();
 
         return Ok(customers);
+    }
+
+    [HttpPut("{id:int}/project")]
+    [Authorize(Roles = "SuperAdmin,Admin,SalesExecutive")]
+    public async Task<ActionResult> UpdateProject(int id, UpdateCustomerProjectRequest request)
+    {
+        var customer = await db.Customers.FindAsync(id);
+        if (customer is null) return NotFound(new { message = "Customer not found." });
+        if (User.IsInRole("SalesExecutive") && customer.AssignedToId != User.UserId()) return Forbid();
+        if (request.ProjectId.HasValue && !await db.Projects.AnyAsync(x => x.Id == request.ProjectId.Value))
+            return BadRequest(new { message = "Project not found." });
+        customer.ProjectId = request.ProjectId;
+        await db.SaveChangesAsync();
+        return NoContent();
     }
 
     [HttpPost]
