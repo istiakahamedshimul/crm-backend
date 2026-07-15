@@ -11,3 +11,4 @@ public enum InvoiceStatus { Draft, Generated, SentToCustomer, PartiallyPaid, Pai
 public enum PaymentMethod { Cash, BankTransfer, Cheque, MobileBanking, CardMachine, OnlineGateway, Other }
 public enum PaymentStatus { Pending, Approved, Rejected }
 public enum CommissionStatus { Pending, Approved, Rejected, Paid, Hold }
+public enum VehicleBookingStatus { Pending, Approved, Rejected, Cancelled }
