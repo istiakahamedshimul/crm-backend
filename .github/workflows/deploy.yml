@@ -17,16 +17,18 @@ jobs:
       - name: Setup .NET 9
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x'
+          dotnet-version: "9.0.x"
 
       - name: Find backend project file
         id: find_project
         shell: bash
         run: |
-          PROJECT_FILE=$(find . -name "*.csproj" | head -n 1)
+          set -e
+
+          PROJECT_FILE=$(find . -name "*.csproj" -not -path "*/obj/*" -not -path "*/bin/*" | head -n 1)
 
           if [ -z "$PROJECT_FILE" ]; then
-            echo "No .csproj file found"
+            echo "No .csproj file found."
             exit 1
           fi
 
@@ -35,31 +37,42 @@ jobs:
           echo "Using project file: $PROJECT_FILE"
           echo "Project name: $PROJECT_NAME"
 
-          echo "project_file=$PROJECT_FILE" >> $GITHUB_OUTPUT
-          echo "project_name=$PROJECT_NAME" >> $GITHUB_OUTPUT
+          echo "project_file=$PROJECT_FILE" >> "$GITHUB_OUTPUT"
+          echo "project_name=$PROJECT_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Restore backend
         shell: bash
         run: |
+          set -e
           dotnet restore "${{ steps.find_project.outputs.project_file }}"
 
       - name: Install EF Core CLI
         shell: bash
         run: |
-          dotnet tool install --global dotnet-ef --version 9.0.*
+          set -e
+          dotnet tool install --global dotnet-ef --version "9.0.*"
 
       - name: Publish backend
         shell: bash
         run: |
+          set -e
+
           PROJECT_FILE="${{ steps.find_project.outputs.project_file }}"
           PROJECT_NAME="${{ steps.find_project.outputs.project_name }}"
 
           echo "Publishing project: $PROJECT_FILE"
           echo "Project name: $PROJECT_NAME"
 
-          dotnet publish "$PROJECT_FILE" -c Release -o ./publish --no-restore
+          rm -rf ./publish
+          mkdir -p ./publish
+
+          dotnet publish "$PROJECT_FILE" \
+            --configuration Release \
+            --output ./publish \
+            --no-restore
 
           echo "Creating production migration bundle..."
+
           dotnet ef migrations bundle \
             --project "$PROJECT_FILE" \
             --startup-project "$PROJECT_FILE" \
@@ -73,11 +86,28 @@ jobs:
 
           echo "$PROJECT_NAME" > ./publish/project_name.txt
 
-          echo "Publish folder:"
+          echo "Publish folder contents:"
           ls -la ./publish
 
-          echo "Checking required runtime files:"
-          ls -la ./publish | grep -E "$PROJECT_NAME.dll|$PROJECT_NAME.runtimeconfig.json|$PROJECT_NAME.deps.json"
+          test -f "./publish/${PROJECT_NAME}.dll" || {
+            echo "Missing ${PROJECT_NAME}.dll"
+            exit 1
+          }
+
+          test -f "./publish/${PROJECT_NAME}.runtimeconfig.json" || {
+            echo "Missing ${PROJECT_NAME}.runtimeconfig.json"
+            exit 1
+          }
+
+          test -f "./publish/${PROJECT_NAME}.deps.json" || {
+            echo "Missing ${PROJECT_NAME}.deps.json"
+            exit 1
+          }
+
+          test -f "./publish/efbundle" || {
+            echo "Missing EF migration bundle."
+            exit 1
+          }
 
       - name: Prepare temporary upload folder on VPS
         uses: appleboy/ssh-action@v1
@@ -87,10 +117,11 @@ jobs:
           password: ${{ secrets.SERVER_PASS }}
           port: ${{ secrets.SERVER_PORT }}
           script: |
-            echo "Preparing temporary upload folder..."
+            set -e
+
             rm -rf /tmp/crm-backend-upload
             mkdir -p /tmp/crm-backend-upload
-            chmod 777 /tmp/crm-backend-upload
+            chmod 755 /tmp/crm-backend-upload
 
       - name: Upload backend files to temporary folder
         uses: appleboy/scp-action@v1
@@ -103,117 +134,228 @@ jobs:
           target: "/tmp/crm-backend-upload"
           strip_components: 1
 
-      - name: Move backend files and restart service
+      - name: Deploy backend and restart service
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_PASS }}
           port: ${{ secrets.SERVER_PORT }}
+          command_timeout: 10m
           script: |
             set -e
 
+            SUDO_PASSWORD='${{ secrets.SERVER_PASS }}'
+            BACKEND_DIRECTORY="/var/www/crm-backend"
+            UPLOAD_DIRECTORY="/tmp/crm-backend-upload"
+            BUNDLE_EXTRACT_DIRECTORY="/var/tmp/crm-backend-bundle"
+            ENVIRONMENT_FILE="/etc/crm-backend.env"
+            SERVICE_FILE="/etc/systemd/system/crm-backend.service"
+
+            run_sudo() {
+              echo "$SUDO_PASSWORD" | sudo -S "$@"
+            }
+
+            if [ ! -f "$UPLOAD_DIRECTORY/project_name.txt" ]; then
+              echo "project_name.txt was not uploaded."
+              exit 1
+            fi
+
+            PROJECT_NAME=$(tr -d '\r\n' < "$UPLOAD_DIRECTORY/project_name.txt")
+
+            if [ -z "$PROJECT_NAME" ]; then
+              echo "Project name is empty."
+              exit 1
+            fi
+
+            if [ ! -f "$UPLOAD_DIRECTORY/${PROJECT_NAME}.dll" ]; then
+              echo "Uploaded backend DLL was not found."
+              exit 1
+            fi
+
+            if [ ! -f "$UPLOAD_DIRECTORY/efbundle" ]; then
+              echo "Uploaded EF migration bundle was not found."
+              exit 1
+            fi
+
             echo "Stopping backend service..."
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S systemctl stop crm-backend || true
+            run_sudo systemctl stop crm-backend || true
 
-            echo "Preparing backend folder..."
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S mkdir -p /var/www/crm-backend
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S rm -rf /var/www/crm-backend/*
+            echo "Preparing backend directory..."
+            run_sudo mkdir -p "$BACKEND_DIRECTORY"
+            run_sudo find "$BACKEND_DIRECTORY" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
 
-            echo "Copying uploaded files to backend folder..."
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S cp -a /tmp/crm-backend-upload/. /var/www/crm-backend/
+            echo "Copying uploaded files..."
+            run_sudo cp -a "$UPLOAD_DIRECTORY"/. "$BACKEND_DIRECTORY"/
 
-            echo "Reading project name..."
-            PROJECT_NAME=$(cat /tmp/crm-backend-upload/project_name.txt)
-            echo "Project name is: $PROJECT_NAME"
+            echo "Creating bundle extraction directory..."
+            run_sudo mkdir -p "$BUNDLE_EXTRACT_DIRECTORY"
+            run_sudo chown -R www-data:www-data "$BUNDLE_EXTRACT_DIRECTORY"
+            run_sudo chmod 750 "$BUNDLE_EXTRACT_DIRECTORY"
 
-            echo "Creating correct backend environment file..."
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S tee /etc/crm-backend.env > /dev/null <<EOF
+            echo "Creating environment file..."
+
+            cat > /tmp/crm-backend.env <<EOF
             ASPNETCORE_ENVIRONMENT=Production
+            DOTNET_ENVIRONMENT=Production
             ASPNETCORE_URLS=http://127.0.0.1:5050
+            DOTNET_BUNDLE_EXTRACT_BASE_DIR=$BUNDLE_EXTRACT_DIRECTORY
+            DOTNET_PRINT_TELEMETRY_MESSAGE=false
+            DOTNET_CLI_TELEMETRY_OPTOUT=1
             ConnectionStrings__Default=Server=localhost;Port=3306;Database=real_estate_crm;User=crmuser;Password=${{ secrets.SERVER_PASS }};AllowPublicKeyRetrieval=true;
             ConnectionStrings__DefaultConnection=Server=localhost;Port=3306;Database=real_estate_crm;User=crmuser;Password=${{ secrets.SERVER_PASS }};AllowPublicKeyRetrieval=true;
             Jwt__Issuer=RealEstateCrm
             Jwt__Audience=RealEstateCrmClients
-            Jwt__Secret=change-this-dev-secret-before-production-please
-            Jwt__Key=CHANGE_THIS_TO_A_LONG_RANDOM_SECRET_KEY_MIN_32_CHARS
+            Jwt__Secret=${{ secrets.JWT_SECRET }}
+            Jwt__Key=${{ secrets.JWT_SECRET }}
             Jwt__ExpiryMinutes=1440
             EOF
 
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S chmod 600 /etc/crm-backend.env
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S chown root:root /etc/crm-backend.env
+            run_sudo cp /tmp/crm-backend.env "$ENVIRONMENT_FILE"
+            run_sudo chown root:root "$ENVIRONMENT_FILE"
+            run_sudo chmod 600 "$ENVIRONMENT_FILE"
+            rm -f /tmp/crm-backend.env
 
-            echo "Creating correct systemd service..."
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S tee /etc/systemd/system/crm-backend.service > /dev/null <<EOF
+            echo "Creating systemd service..."
+
+            cat > /tmp/crm-backend.service <<EOF
             [Unit]
-            Description=CrmServer ASP.NET Core Backend
+            Description=CRM ASP.NET Core Backend
             After=network.target mysql.service
+            Wants=mysql.service
 
             [Service]
-            WorkingDirectory=/var/www/crm-backend
-            ExecStart=/usr/bin/dotnet /var/www/crm-backend/${PROJECT_NAME}.dll
+            Type=simple
+            WorkingDirectory=$BACKEND_DIRECTORY
+            ExecStart=/usr/bin/dotnet $BACKEND_DIRECTORY/${PROJECT_NAME}.dll
+
+            User=www-data
+            Group=www-data
+
+            EnvironmentFile=$ENVIRONMENT_FILE
+            Environment=DOTNET_BUNDLE_EXTRACT_BASE_DIR=$BUNDLE_EXTRACT_DIRECTORY
+
             Restart=always
             RestartSec=10
             KillSignal=SIGINT
             SyslogIdentifier=crm-backend
-            User=www-data
-            EnvironmentFile=/etc/crm-backend.env
-            Environment=DOTNET_PRINT_TELEMETRY_MESSAGE=false
+
+            NoNewPrivileges=true
+            PrivateTmp=true
 
             [Install]
             WantedBy=multi-user.target
             EOF
 
-            echo "Ensuring MySQL database and user exist..."
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S mysql -e "CREATE DATABASE IF NOT EXISTS real_estate_crm CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S mysql -e "CREATE USER IF NOT EXISTS 'crmuser'@'localhost' IDENTIFIED BY '${{ secrets.SERVER_PASS }}';"
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S mysql -e "ALTER USER 'crmuser'@'localhost' IDENTIFIED BY '${{ secrets.SERVER_PASS }}';"
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S mysql -e "GRANT ALL PRIVILEGES ON real_estate_crm.* TO 'crmuser'@'localhost';"
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S mysql -e "FLUSH PRIVILEGES;"
+            run_sudo cp /tmp/crm-backend.service "$SERVICE_FILE"
+            run_sudo chown root:root "$SERVICE_FILE"
+            run_sudo chmod 644 "$SERVICE_FILE"
+            rm -f /tmp/crm-backend.service
 
-            echo "Fixing backend permissions..."
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S chown -R www-data:www-data /var/www/crm-backend
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S chmod -R 775 /var/www/crm-backend
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S chmod 755 /var/www/crm-backend/efbundle
+            echo "Reloading systemd..."
+            run_sudo systemctl daemon-reload
+
+            echo "Ensuring MySQL database and user exist..."
+
+            run_sudo mysql -e "
+              CREATE DATABASE IF NOT EXISTS real_estate_crm
+              CHARACTER SET utf8mb4
+              COLLATE utf8mb4_unicode_ci;
+            "
+
+            run_sudo mysql -e "
+              CREATE USER IF NOT EXISTS 'crmuser'@'localhost'
+              IDENTIFIED BY '${{ secrets.SERVER_PASS }}';
+            "
+
+            run_sudo mysql -e "
+              ALTER USER 'crmuser'@'localhost'
+              IDENTIFIED BY '${{ secrets.SERVER_PASS }}';
+            "
+
+            run_sudo mysql -e "
+              GRANT ALL PRIVILEGES
+              ON real_estate_crm.*
+              TO 'crmuser'@'localhost';
+            "
+
+            run_sudo mysql -e "FLUSH PRIVILEGES;"
+
+            echo "Fixing permissions..."
+            run_sudo chown -R www-data:www-data "$BACKEND_DIRECTORY"
+            run_sudo find "$BACKEND_DIRECTORY" -type d -exec chmod 755 {} \;
+            run_sudo find "$BACKEND_DIRECTORY" -type f -exec chmod 644 {} \;
+            run_sudo chmod 755 "$BACKEND_DIRECTORY/efbundle"
 
             echo "Applying pending database migrations..."
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S systemd-run \
+
+            MIGRATION_UNIT="crm-backend-migration-${{ github.run_id }}-${{ github.run_attempt }}"
+
+            run_sudo systemd-run \
               --quiet \
               --wait \
               --pipe \
               --collect \
-              --unit=crm-backend-migration-${{ github.run_id }} \
-              --property=User=www-data \
-              --property=WorkingDirectory=/var/www/crm-backend \
-              --property=EnvironmentFile=/etc/crm-backend.env \
-              /var/www/crm-backend/efbundle --verbose
+              --unit="$MIGRATION_UNIT" \
+              --property="User=www-data" \
+              --property="Group=www-data" \
+              --property="WorkingDirectory=$BACKEND_DIRECTORY" \
+              --property="EnvironmentFile=$ENVIRONMENT_FILE" \
+              --property="Environment=DOTNET_BUNDLE_EXTRACT_BASE_DIR=$BUNDLE_EXTRACT_DIRECTORY" \
+              "$BACKEND_DIRECTORY/efbundle" --verbose
 
             echo "Database migrations applied successfully."
 
-            echo "Reloading systemd..."
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S systemctl daemon-reload
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S systemctl enable crm-backend
+            echo "Enabling backend service..."
+            run_sudo systemctl enable crm-backend
 
             echo "Restarting backend service..."
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S systemctl restart crm-backend
+            run_sudo systemctl restart crm-backend
 
             echo "Waiting for backend..."
-            sleep 8
+
+            BACKEND_READY=false
+
+            for ATTEMPT in $(seq 1 12); do
+              if curl \
+                --silent \
+                --show-error \
+                --fail \
+                --max-time 5 \
+                http://127.0.0.1:5050/api > /dev/null 2>&1; then
+
+                BACKEND_READY=true
+                echo "Backend responded successfully."
+                break
+              fi
+
+              echo "Backend is not ready. Attempt $ATTEMPT of 12."
+              sleep 5
+            done
 
             echo "Backend service status:"
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S systemctl status crm-backend --no-pager || true
+            run_sudo systemctl status crm-backend --no-pager || true
 
-            echo "Checking backend internal port 5050:"
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S ss -tulpn | grep ':5050' || true
+            echo "Checking port 5050:"
+            run_sudo ss -tulpn | grep ':5050' || true
 
-            echo "Checking Nginx public API port 5000:"
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S ss -tulpn | grep ':5000' || true
+            echo "Checking Nginx port 5000:"
+            run_sudo ss -tulpn | grep ':5000' || true
 
-            echo "Testing backend API locally:"
-            curl -i http://127.0.0.1:5050/api || true
+            echo "Testing backend directly:"
+            curl -i --max-time 10 http://127.0.0.1:5050/api || true
 
-            echo "Testing backend API through Nginx:"
-            curl -i http://127.0.0.1:5000/api || true
+            echo "Testing backend through Nginx:"
+            curl -i --max-time 10 http://127.0.0.1:5000/api || true
 
-            echo "Last backend logs:"
-            echo "${{ secrets.SERVER_PASS }}" | sudo -S journalctl -u crm-backend -n 40 --no-pager || true
+            echo "Recent backend logs:"
+            run_sudo journalctl -u crm-backend -n 60 --no-pager || true
+
+            if [ "$BACKEND_READY" != "true" ]; then
+              echo "Backend failed to become ready."
+              exit 1
+            fi
+
+            rm -rf "$UPLOAD_DIRECTORY"
+
+            echo "Backend deployment completed successfully."

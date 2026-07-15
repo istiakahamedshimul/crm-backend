@@ -21,8 +21,6 @@ public class DashboardController(CrmDbContext db) : ControllerBase
             leads = await db.Leads.CountAsync(),
             customers = await db.Customers.CountAsync(),
             projects = await db.Projects.CountAsync(),
-            availableUnits = await db.PropertyUnits.CountAsync(x => x.Status == UnitStatus.Available),
-            bookedUnits = await db.PropertyUnits.CountAsync(x => x.Status == UnitStatus.Booked),
             invoices = await db.Invoices.CountAsync(),
             unpaidInvoices = await db.Invoices.CountAsync(x => x.Status != InvoiceStatus.Paid),
             pendingPayments = await db.Payments.CountAsync(x => x.Status == PaymentStatus.Pending),
