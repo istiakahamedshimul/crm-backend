@@ -136,12 +136,15 @@ jobs:
 
       - name: Deploy backend and restart service
         uses: appleboy/ssh-action@v1
+        env:
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_PASS }}
           port: ${{ secrets.SERVER_PORT }}
           command_timeout: 10m
+          envs: JWT_SECRET
           script: |
             set -e
 
@@ -151,6 +154,11 @@ jobs:
             BUNDLE_EXTRACT_DIRECTORY="/var/tmp/crm-backend-bundle"
             ENVIRONMENT_FILE="/etc/crm-backend.env"
             SERVICE_FILE="/etc/systemd/system/crm-backend.service"
+
+            if [ "${#JWT_SECRET}" -lt 32 ]; then
+              echo "JWT_SECRET must exist in GitHub repository secrets and contain at least 32 characters."
+              exit 1
+            fi
 
             run_sudo() {
               echo "$SUDO_PASSWORD" | sudo -S "$@"
@@ -206,8 +214,8 @@ jobs:
             ConnectionStrings__DefaultConnection=Server=localhost;Port=3306;Database=real_estate_crm;User=crmuser;Password=${{ secrets.SERVER_PASS }};AllowPublicKeyRetrieval=true;
             Jwt__Issuer=RealEstateCrm
             Jwt__Audience=RealEstateCrmClients
-            Jwt__Secret=${{ secrets.JWT_SECRET }}
-            Jwt__Key=${{ secrets.JWT_SECRET }}
+            Jwt__Secret=$JWT_SECRET
+            Jwt__Key=$JWT_SECRET
             Jwt__ExpiryMinutes=1440
             EOF
 
@@ -322,7 +330,7 @@ jobs:
                 --show-error \
                 --fail \
                 --max-time 5 \
-                http://127.0.0.1:5050/api > /dev/null 2>&1; then
+                http://127.0.0.1:5050/health > /dev/null 2>&1; then
 
                 BACKEND_READY=true
                 echo "Backend responded successfully."
@@ -343,10 +351,10 @@ jobs:
             run_sudo ss -tulpn | grep ':5000' || true
 
             echo "Testing backend directly:"
-            curl -i --max-time 10 http://127.0.0.1:5050/api || true
+            curl -i --max-time 10 http://127.0.0.1:5050/health || true
 
             echo "Testing backend through Nginx:"
-            curl -i --max-time 10 http://127.0.0.1:5000/api || true
+            curl -i --max-time 10 http://127.0.0.1:5000/health || true
 
             echo "Recent backend logs:"
             run_sudo journalctl -u crm-backend -n 60 --no-pager || true
