@@ -4,10 +4,11 @@ public class Project
 {
     public int Id { get; set; }
     public string Name { get; set; } = "";
+    public int SubGroupId { get; set; }
+    public SubGroup SubGroup { get; set; } = null!;
     public ProjectType Type { get; set; } = ProjectType.Apartment;
     public string Location { get; set; } = "";
     public string? Address { get; set; }
     public string? Description { get; set; }
     public ProjectStatus Status { get; set; } = ProjectStatus.Ongoing;
-    public List<PropertyUnit> Units { get; set; } = [];
 }

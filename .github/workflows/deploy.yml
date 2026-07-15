@@ -43,6 +43,11 @@ jobs:
         run: |
           dotnet restore "${{ steps.find_project.outputs.project_file }}"
 
+      - name: Install EF Core CLI
+        shell: bash
+        run: |
+          dotnet tool install --global dotnet-ef --version 9.0.*
+
       - name: Publish backend
         shell: bash
         run: |
@@ -53,6 +58,18 @@ jobs:
           echo "Project name: $PROJECT_NAME"
 
           dotnet publish "$PROJECT_FILE" -c Release -o ./publish --no-restore
+
+          echo "Creating production migration bundle..."
+          dotnet ef migrations bundle \
+            --project "$PROJECT_FILE" \
+            --startup-project "$PROJECT_FILE" \
+            --configuration Release \
+            --runtime linux-x64 \
+            --self-contained \
+            --output ./publish/efbundle \
+            --force
+
+          chmod +x ./publish/efbundle
 
           echo "$PROJECT_NAME" > ./publish/project_name.txt
 
@@ -157,6 +174,21 @@ jobs:
             echo "Fixing backend permissions..."
             echo "${{ secrets.SERVER_PASS }}" | sudo -S chown -R www-data:www-data /var/www/crm-backend
             echo "${{ secrets.SERVER_PASS }}" | sudo -S chmod -R 775 /var/www/crm-backend
+            echo "${{ secrets.SERVER_PASS }}" | sudo -S chmod 755 /var/www/crm-backend/efbundle
+
+            echo "Applying pending database migrations..."
+            echo "${{ secrets.SERVER_PASS }}" | sudo -S systemd-run \
+              --quiet \
+              --wait \
+              --pipe \
+              --collect \
+              --unit=crm-backend-migration-${{ github.run_id }} \
+              --property=User=www-data \
+              --property=WorkingDirectory=/var/www/crm-backend \
+              --property=EnvironmentFile=/etc/crm-backend.env \
+              /var/www/crm-backend/efbundle --verbose
+
+            echo "Database migrations applied successfully."
 
             echo "Reloading systemd..."
             echo "${{ secrets.SERVER_PASS }}" | sudo -S systemctl daemon-reload
