@@ -5,10 +5,12 @@ public class VehicleBooking
     public int Id { get; set; }
     public int SalesExecutiveId { get; set; }
     public User SalesExecutive { get; set; } = null!;
-    public int CustomerId { get; set; }
-    public Customer Customer { get; set; } = null!;
-    public int ProjectId { get; set; }
-    public Project Project { get; set; } = null!;
+    // Nullable only for bookings created before customer/project tracking existed.
+    // New bookings still require both IDs through the request DTOs/controllers.
+    public int? CustomerId { get; set; }
+    public Customer? Customer { get; set; }
+    public int? ProjectId { get; set; }
+    public Project? Project { get; set; }
     public DateOnly VisitDate { get; set; }
     public TimeOnly VisitTime { get; set; }
     public int PersonCount { get; set; }
