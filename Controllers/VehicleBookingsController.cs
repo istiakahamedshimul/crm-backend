@@ -102,7 +102,8 @@ public class VehicleBookingsController(CrmDbContext db) : ControllerBase
         if (customer is null || customer.AssignedToId is null) return BadRequest(new { message = "Customer must have an assigned sales employee." });
         if (!await db.Projects.AnyAsync(x => x.Id == request.ProjectId)) return BadRequest(new { message = "Project not found." });
         if (vehicle is null || !vehicle.IsActive) return BadRequest(new { message = "Select an active vehicle." });
-        if (request.PersonCount < 1 || request.PersonCount > vehicle.SeatingCapacity) return BadRequest(new { message = "Visitor count exceeds vehicle capacity." });
+        // Capacity is informational; admins may assign any active vehicle.
+        // if (request.PersonCount < 1 || request.PersonCount > vehicle.SeatingCapacity) return BadRequest(new { message = "Visitor count exceeds vehicle capacity." });
         if (request.VisitDate < DateOnly.FromDateTime(DateTime.Today) || string.IsNullOrWhiteSpace(request.PickupPlace)) return BadRequest(new { message = "Enter a valid visit date and pickup location." });
         var booking = new VehicleBooking { SalesExecutiveId = customer.AssignedToId.Value, CustomerId = request.CustomerId, ProjectId = request.ProjectId,
             VisitDate = request.VisitDate, VisitTime = request.VisitTime, PersonCount = request.PersonCount, PickupPlace = request.PickupPlace.Trim(),
@@ -132,7 +133,8 @@ public class VehicleBookingsController(CrmDbContext db) : ControllerBase
             if (request.VehicleId is null) return BadRequest(new { message = "Select a vehicle before approval." });
             var vehicle = await db.Vehicles.FindAsync(request.VehicleId);
             if (vehicle is null || !vehicle.IsActive) return BadRequest(new { message = "Select an active vehicle." });
-            if (booking.PersonCount > vehicle.SeatingCapacity) return BadRequest(new { message = "Visitor count exceeds vehicle capacity." });
+            // Capacity is informational; admins may assign any active vehicle.
+            // if (booking.PersonCount > vehicle.SeatingCapacity) return BadRequest(new { message = "Visitor count exceeds vehicle capacity." });
             booking.VehicleId = vehicle.Id; booking.Driver = request.Driver?.Trim();
         }
         booking.Status = status;
