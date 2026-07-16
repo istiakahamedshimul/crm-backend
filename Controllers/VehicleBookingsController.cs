@@ -17,7 +17,8 @@ public class VehicleBookingsController(CrmDbContext db) : ControllerBase
     [HttpGet]
     public async Task<ActionResult> GetBookings()
     {
-        var query = db.VehicleBookings.Include(x => x.SalesExecutive).AsQueryable();
+        var query = db.VehicleBookings.Include(x => x.SalesExecutive).Include(x => x.Customer)
+            .Include(x => x.Project).Include(x => x.Vehicle).AsQueryable();
         if (User.IsInRole("SalesExecutive")) query = query.Where(x => x.SalesExecutiveId == User.UserId());
 
         return Ok(await query.OrderByDescending(x => x.VisitDate).ThenByDescending(x => x.CreatedAt)
@@ -26,10 +27,20 @@ public class VehicleBookingsController(CrmDbContext db) : ControllerBase
                 x.Id,
                 x.SalesExecutiveId,
                 SalesExecutive = x.SalesExecutive.FullName,
+                x.CustomerId,
+                Customer = x.Customer.Name,
+                CustomerPhone = x.Customer.Phone,
+                x.ProjectId,
+                Project = x.Project.Name,
                 x.VisitDate,
+                x.VisitTime,
                 x.PersonCount,
-                x.VisitPlace,
                 x.PickupPlace,
+                x.Purpose,
+                x.AdditionalInformation,
+                x.VehicleId,
+                Vehicle = x.Vehicle == null ? null : x.Vehicle.RegistrationNumber,
+                x.Driver,
                 x.Status,
                 x.AdminRemarks,
                 x.CreatedAt
@@ -42,8 +53,11 @@ public class VehicleBookingsController(CrmDbContext db) : ControllerBase
     {
         if (request.PersonCount is < 1 or > 50)
             return BadRequest(new { message = "Person count must be between 1 and 50." });
-        if (string.IsNullOrWhiteSpace(request.VisitPlace) || string.IsNullOrWhiteSpace(request.PickupPlace))
-            return BadRequest(new { message = "Visit place and pickup place are required." });
+        if (string.IsNullOrWhiteSpace(request.PickupPlace) || string.IsNullOrWhiteSpace(request.Purpose))
+            return BadRequest(new { message = "Pickup location and purpose are required." });
+        var customer = await db.Customers.FindAsync(request.CustomerId);
+        if (customer is null || customer.AssignedToId != User.UserId()) return BadRequest(new { message = "Select one of your customers." });
+        if (!await db.Projects.AnyAsync(x => x.Id == request.ProjectId)) return BadRequest(new { message = "Project not found." });
         if (request.TimezoneOffsetMinutes is < -840 or > 840)
             return BadRequest(new { message = "Invalid timezone offset." });
 
@@ -62,10 +76,15 @@ public class VehicleBookingsController(CrmDbContext db) : ControllerBase
         var booking = new VehicleBooking
         {
             SalesExecutiveId = User.UserId(),
+            CustomerId = request.CustomerId,
+            ProjectId = request.ProjectId,
             VisitDate = request.VisitDate,
+            VisitTime = request.VisitTime,
             PersonCount = request.PersonCount,
-            VisitPlace = request.VisitPlace.Trim(),
+            VisitPlace = "",
             PickupPlace = request.PickupPlace.Trim(),
+            Purpose = request.Purpose.Trim(),
+            AdditionalInformation = request.AdditionalInformation?.Trim(),
             ClientLocalDateTime = submittedLocal,
             TimezoneOffsetMinutes = request.TimezoneOffsetMinutes
         };
@@ -74,22 +93,50 @@ public class VehicleBookingsController(CrmDbContext db) : ControllerBase
         return Created($"/api/vehicle-bookings/{booking.Id}", new { booking.Id, booking.Status });
     }
 
+    [HttpPost("admin")]
+    [Authorize(Roles = "SuperAdmin,Admin")]
+    public async Task<ActionResult> CreateAdmin(CreateAdminVehicleBookingRequest request)
+    {
+        var customer = await db.Customers.FindAsync(request.CustomerId);
+        var vehicle = await db.Vehicles.FindAsync(request.VehicleId);
+        if (customer is null || customer.AssignedToId is null) return BadRequest(new { message = "Customer must have an assigned sales employee." });
+        if (!await db.Projects.AnyAsync(x => x.Id == request.ProjectId)) return BadRequest(new { message = "Project not found." });
+        if (vehicle is null || !vehicle.IsActive) return BadRequest(new { message = "Select an active vehicle." });
+        if (request.PersonCount < 1 || request.PersonCount > vehicle.SeatingCapacity) return BadRequest(new { message = "Visitor count exceeds vehicle capacity." });
+        if (request.VisitDate < DateOnly.FromDateTime(DateTime.Today) || string.IsNullOrWhiteSpace(request.PickupPlace)) return BadRequest(new { message = "Enter a valid visit date and pickup location." });
+        var booking = new VehicleBooking { SalesExecutiveId = customer.AssignedToId.Value, CustomerId = request.CustomerId, ProjectId = request.ProjectId,
+            VisitDate = request.VisitDate, VisitTime = request.VisitTime, PersonCount = request.PersonCount, PickupPlace = request.PickupPlace.Trim(),
+            Purpose = request.Purpose.Trim(), AdditionalInformation = request.AdditionalInformation?.Trim(), VehicleId = request.VehicleId,
+            Driver = request.Driver?.Trim(), Status = VehicleBookingStatus.Approved, AdminRemarks = request.Remarks?.Trim(), ReviewedById = User.UserId(), ReviewedAt = DateTime.UtcNow };
+        db.VehicleBookings.Add(booking); await db.SaveChangesAsync();
+        return Created($"/api/vehicle-bookings/{booking.Id}", new { booking.Id, booking.Status });
+    }
+
     [HttpPost("{id:int}/approve")]
     [Authorize(Roles = "SuperAdmin,Admin")]
     public Task<ActionResult> Approve(int id, ReviewVehicleBookingRequest request) =>
-        Review(id, VehicleBookingStatus.Approved, request.Remarks);
+        Review(id, VehicleBookingStatus.Approved, request);
 
     [HttpPost("{id:int}/reject")]
     [Authorize(Roles = "SuperAdmin,Admin")]
     public Task<ActionResult> Reject(int id, ReviewVehicleBookingRequest request) =>
-        Review(id, VehicleBookingStatus.Rejected, request.Remarks);
+        Review(id, VehicleBookingStatus.Rejected, request);
 
-    private async Task<ActionResult> Review(int id, VehicleBookingStatus status, string? remarks)
+    private async Task<ActionResult> Review(int id, VehicleBookingStatus status, ReviewVehicleBookingRequest request)
     {
         var booking = await db.VehicleBookings.FindAsync(id);
         if (booking is null) return NotFound(new { message = "Vehicle booking not found." });
+        if (booking.Status != VehicleBookingStatus.Pending) return Conflict(new { message = "Only pending requests can be reviewed." });
+        if (status == VehicleBookingStatus.Approved)
+        {
+            if (request.VehicleId is null) return BadRequest(new { message = "Select a vehicle before approval." });
+            var vehicle = await db.Vehicles.FindAsync(request.VehicleId);
+            if (vehicle is null || !vehicle.IsActive) return BadRequest(new { message = "Select an active vehicle." });
+            if (booking.PersonCount > vehicle.SeatingCapacity) return BadRequest(new { message = "Visitor count exceeds vehicle capacity." });
+            booking.VehicleId = vehicle.Id; booking.Driver = request.Driver?.Trim();
+        }
         booking.Status = status;
-        booking.AdminRemarks = remarks;
+        booking.AdminRemarks = request.Remarks?.Trim();
         booking.ReviewedById = User.UserId();
         booking.ReviewedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
