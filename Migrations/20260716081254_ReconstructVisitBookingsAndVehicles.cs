@@ -23,8 +23,7 @@ namespace backend.Migrations
                 name: "CustomerId",
                 table: "VehicleBookings",
                 type: "int",
-                nullable: false,
-                defaultValue: 0);
+                nullable: true);
 
             migrationBuilder.AddColumn<string>(
                 name: "Driver",
@@ -37,8 +36,7 @@ namespace backend.Migrations
                 name: "ProjectId",
                 table: "VehicleBookings",
                 type: "int",
-                nullable: false,
-                defaultValue: 0);
+                nullable: true);
 
             migrationBuilder.AddColumn<string>(
                 name: "Purpose",

@@ -289,6 +289,54 @@ jobs:
 
             run_sudo mysql -e "FLUSH PRIVILEGES;"
 
+            # MySQL DDL is not fully transactional. If this migration previously
+            # failed while adding its foreign keys, remove only its unrecorded
+            # partial schema so the corrected EF migration can run cleanly.
+            MIGRATION_ID="20260716081254_ReconstructVisitBookingsAndVehicles"
+            HISTORY_EXISTS=$(run_sudo mysql --batch --skip-column-names -e "
+              SELECT COUNT(*)
+              FROM information_schema.TABLES
+              WHERE TABLE_SCHEMA = 'real_estate_crm'
+                AND TABLE_NAME = '__EFMigrationsHistory';
+            ")
+            MIGRATION_APPLIED=0
+            if [ "$HISTORY_EXISTS" = "1" ]; then
+              MIGRATION_APPLIED=$(run_sudo mysql --batch --skip-column-names real_estate_crm -e "
+                SELECT COUNT(*)
+                FROM __EFMigrationsHistory
+                WHERE MigrationId = '$MIGRATION_ID';
+              ")
+            fi
+            PARTIAL_MIGRATION=$(run_sudo mysql --batch --skip-column-names -e "
+              SELECT COUNT(*)
+              FROM information_schema.COLUMNS
+              WHERE TABLE_SCHEMA = 'real_estate_crm'
+                AND TABLE_NAME = 'VehicleBookings'
+                AND COLUMN_NAME = 'CustomerId';
+            ")
+
+            if [ "$MIGRATION_APPLIED" = "0" ] && [ "$PARTIAL_MIGRATION" = "1" ]; then
+              echo "Repairing partial vehicle booking migration..."
+              run_sudo mysql real_estate_crm -e "
+                ALTER TABLE VehicleBookings
+                  DROP INDEX IX_VehicleBookings_CustomerId,
+                  DROP INDEX IX_VehicleBookings_ProjectId,
+                  DROP INDEX IX_VehicleBookings_VehicleId;
+
+                ALTER TABLE VehicleBookings
+                  DROP COLUMN AdditionalInformation,
+                  DROP COLUMN CustomerId,
+                  DROP COLUMN Driver,
+                  DROP COLUMN ProjectId,
+                  DROP COLUMN Purpose,
+                  DROP COLUMN VehicleId,
+                  DROP COLUMN VisitTime;
+
+                DROP TABLE Vehicles;
+              "
+              echo "Partial migration repaired. EF will now apply it normally."
+            fi
+
             echo "Fixing permissions..."
             run_sudo chown -R www-data:www-data "$BACKEND_DIRECTORY"
             run_sudo find "$BACKEND_DIRECTORY" -type d -exec chmod 755 {} \;
