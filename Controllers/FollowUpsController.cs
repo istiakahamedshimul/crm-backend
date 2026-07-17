@@ -17,19 +17,23 @@ public class FollowUpsController(CrmDbContext db) : ControllerBase
     [HttpGet]
     public async Task<ActionResult> GetFollowUps()
     {
-        var query = db.FollowUps.Include(x => x.Lead).Include(x => x.CreatedBy).Include(x => x.Proofs).AsQueryable();
+        var query = db.FollowUps.Include(x => x.Lead).Include(x => x.Customer).Include(x => x.CreatedBy).Include(x => x.Proofs).AsQueryable();
         if (User.IsInRole("SalesExecutive")) query = query.Where(x => x.CreatedById == User.UserId());
 
         var followUps = await query.OrderByDescending(x => x.CreatedAt)
             .Select(x => new
             {
                 x.Id,
+                x.LeadId,
+                x.CustomerId,
+                Customer = x.Customer == null ? x.Lead.CustomerName : x.Customer.Name,
                 Lead = x.Lead.CustomerName,
                 SalesExecutive = x.CreatedBy.FullName,
                 x.Type,
                 x.Summary,
                 x.CustomerResponse,
                 x.NextFollowUpAt,
+                x.CreatedAt,
                 Proofs = x.Proofs.Select(p => new { p.ProofType, p.FileUrl })
             })
             .ToListAsync();
