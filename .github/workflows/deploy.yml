@@ -138,13 +138,14 @@ jobs:
         uses: appleboy/ssh-action@v1
         env:
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          ONESIGNAL_API_KEY: ${{ secrets.ONESIGNAL_API_KEY }}
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_PASS }}
           port: ${{ secrets.SERVER_PORT }}
           command_timeout: 10m
-          envs: JWT_SECRET
+          envs: JWT_SECRET,ONESIGNAL_API_KEY
           script: |
             set -e
 
@@ -157,6 +158,11 @@ jobs:
 
             if [ "${#JWT_SECRET}" -lt 32 ]; then
               echo "JWT_SECRET must exist in GitHub repository secrets and contain at least 32 characters."
+              exit 1
+            fi
+
+            if [ -z "$ONESIGNAL_API_KEY" ]; then
+              echo "ONESIGNAL_API_KEY must exist in GitHub repository secrets."
               exit 1
             fi
 
@@ -217,6 +223,8 @@ jobs:
             Jwt__Secret=$JWT_SECRET
             Jwt__Key=$JWT_SECRET
             Jwt__ExpiryMinutes=1440
+            OneSignal__AppId=37215f6d-f607-4864-b3de-6c78b4d4e64d
+            OneSignal__ApiKey=$ONESIGNAL_API_KEY
             EOF
 
             run_sudo cp /tmp/crm-backend.env "$ENVIRONMENT_FILE"
