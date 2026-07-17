@@ -55,7 +55,8 @@ public class FilesController(IWebHostEnvironment environment) : ControllerBase
         }
 
         var relativeUrl = $"/uploads/{safeCategory}/{fileName}";
-        var absoluteUrl = $"{Request.Scheme}://{Request.Host}{relativeUrl}";
-        return Ok(new { fileName, url = absoluteUrl, relativeUrl });
+        // Store a host-independent URL. Reverse proxies may expose the API on a
+        // different port from the admin app, making absolute upload URLs invalid.
+        return Ok(new { fileName, url = relativeUrl, relativeUrl });
     }
 }

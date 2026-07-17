@@ -11,6 +11,8 @@ public class Lead
     public string? BudgetRange { get; set; }
     public string? PreferredLocation { get; set; }
     public string? InterestedProject { get; set; }
+    public int? ProjectId { get; set; }
+    public Project? Project { get; set; }
     public LeadSource Source { get; set; } = LeadSource.ManualEntry;
     public LeadPriority Priority { get; set; } = LeadPriority.Warm;
     public LeadStatus Status { get; set; } = LeadStatus.New;

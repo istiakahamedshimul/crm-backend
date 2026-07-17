@@ -18,11 +18,11 @@ public class LeadsController(CrmDbContext db, ILeadAssignmentService assignmentS
     [HttpGet]
     public async Task<ActionResult<List<LeadDto>>> GetLeads()
     {
-        var query = db.Leads.Include(x => x.AssignedTo).AsQueryable();
+        var query = db.Leads.Include(x => x.AssignedTo).Include(x => x.Project).AsQueryable();
         if (User.IsInRole("SalesExecutive")) query = query.Where(x => x.AssignedToId == User.UserId());
 
         var leads = await query.OrderByDescending(x => x.CreatedAt)
-            .Select(x => new LeadDto(x.Id, x.CustomerName, x.Phone, x.Email, x.Source, x.Priority, x.Status, x.AssignedToId, x.AssignedTo == null ? null : x.AssignedTo.FullName, x.NextFollowUpAt))
+            .Select(x => new LeadDto(x.Id, x.CustomerName, x.Phone, x.Email, x.Source, x.Priority, x.Status, x.AssignedToId, x.AssignedTo == null ? null : x.AssignedTo.FullName, x.ProjectId, x.Project == null ? null : x.Project.Name, x.NextFollowUpAt))
             .ToListAsync();
 
         return Ok(leads);
@@ -43,6 +43,11 @@ public class LeadsController(CrmDbContext db, ILeadAssignmentService assignmentS
             return BadRequest(new { message = "Assigned user must be an active sales executive." });
         }
 
+        if (request.ProjectId.HasValue && !await db.Projects.AnyAsync(x => x.Id == request.ProjectId.Value))
+        {
+            return BadRequest(new { message = "Selected project was not found." });
+        }
+
         var conflict = await assignmentService.GetAssignmentConflictAsync(request.Phone, request.Email, request.AssignedToId.Value);
         if (conflict is not null)
         {
@@ -58,7 +63,7 @@ public class LeadsController(CrmDbContext db, ILeadAssignmentService assignmentS
             Address = request.Address,
             BudgetRange = request.BudgetRange,
             PreferredLocation = request.PreferredLocation,
-            InterestedProject = request.InterestedProject,
+            ProjectId = request.ProjectId,
             Source = request.Source,
             Priority = request.Priority,
             Status = LeadStatus.Assigned,
