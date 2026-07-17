@@ -29,6 +29,7 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options) : DbContext(op
         modelBuilder.Entity<SubGroup>().HasIndex(x => x.Name).IsUnique();
         modelBuilder.Entity<Project>().HasOne(x => x.SubGroup).WithMany(x => x.Projects).HasForeignKey(x => x.SubGroupId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<Customer>().HasOne(x => x.Project).WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.SetNull);
+        modelBuilder.Entity<Lead>().HasOne(x => x.Project).WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.SetNull);
         modelBuilder.Entity<Customer>().HasOne(x => x.Lead).WithMany().HasForeignKey(x => x.LeadId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<Commission>().HasOne(x => x.Payment).WithMany().HasForeignKey(x => x.PaymentId);
         modelBuilder.Entity<Payment>().HasOne(x => x.VerifiedBy).WithMany().HasForeignKey(x => x.VerifiedById).OnDelete(DeleteBehavior.Restrict);

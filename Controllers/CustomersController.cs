@@ -58,32 +58,39 @@ public class CustomersController(CrmDbContext db, ILeadAssignmentService assignm
     [Authorize(Roles = "SuperAdmin,Admin")]
     public async Task<ActionResult> CreateCustomer(CreateCustomerRequest request)
     {
-        var lead = await db.Leads.FindAsync(request.LeadId);
-        if (lead is null) return BadRequest(new { message = "Lead not found." });
-        if (!lead.AssignedToId.HasValue) return BadRequest(new { message = "Lead must be assigned to a sales executive before creating a customer profile." });
-        if (await db.Customers.AnyAsync(x => x.LeadId == lead.Id)) return Conflict(new { message = "Customer profile already exists for this lead." });
+        if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.Phone))
+            return BadRequest(new { message = "Customer name and phone are required." });
 
-        var phone = string.IsNullOrWhiteSpace(request.Phone) ? lead.Phone : request.Phone;
-        var email = string.IsNullOrWhiteSpace(request.Email) ? lead.Email : request.Email;
-        var conflict = await assignmentService.GetAssignmentConflictAsync(phone, email, lead.AssignedToId.Value);
-        if (conflict is not null) return Conflict(new { message = conflict });
+        Lead? lead = null;
+        if (request.LeadId.HasValue)
+        {
+            lead = await db.Leads.FindAsync(request.LeadId.Value);
+            if (lead is null) return BadRequest(new { message = "Lead not found." });
+            if (await db.Customers.AnyAsync(x => x.LeadId == lead.Id)) return Conflict(new { message = "Customer profile already exists for this lead." });
+        }
+
+        var phone = request.Phone.Trim();
+        var email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email.Trim();
+        if (await db.Customers.AnyAsync(x => x.Phone == phone || (email != null && x.Email != null && x.Email.ToLower() == email.ToLower())))
+            return Conflict(new { message = "A customer with this phone or email already exists." });
 
         var customer = new Customer
         {
-            LeadId = lead.Id,
-            Name = string.IsNullOrWhiteSpace(request.Name) ? lead.CustomerName : request.Name,
+            LeadId = lead?.Id,
+            Name = request.Name.Trim(),
             Phone = phone,
-            AlternativePhone = request.AlternativePhone ?? lead.AlternativePhone,
+            AlternativePhone = request.AlternativePhone,
             Email = email,
-            Address = request.Address ?? lead.Address,
+            Address = request.Address,
             Occupation = request.Occupation,
             NidOrPassport = request.NidOrPassport,
             NomineeName = request.NomineeName,
             NomineePhone = request.NomineePhone,
-            AssignedToId = lead.AssignedToId
+            AssignedToId = lead?.AssignedToId,
+            ProjectId = lead?.ProjectId
         };
 
-        lead.Status = LeadStatus.Booked;
+        if (lead is not null) lead.Status = LeadStatus.Booked;
         db.Customers.Add(customer);
         await db.SaveChangesAsync();
         return Created($"/api/customers/{customer.Id}", new { customer.Id, customer.LeadId, customer.AssignedToId });
