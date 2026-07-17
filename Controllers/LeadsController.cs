@@ -13,7 +13,10 @@ namespace backend.Controllers;
 [Authorize]
 [Route("api/leads")]
 [Tags("Leads")]
-public class LeadsController(CrmDbContext db, ILeadAssignmentService assignmentService) : ControllerBase
+public class LeadsController(
+    CrmDbContext db,
+    ILeadAssignmentService assignmentService,
+    IOneSignalNotificationService notificationService) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<List<LeadDto>>> GetLeads()
@@ -74,6 +77,8 @@ public class LeadsController(CrmDbContext db, ILeadAssignmentService assignmentS
 
         db.Leads.Add(lead);
         await db.SaveChangesAsync();
+        await notificationService.SendLeadAssignedAsync(
+            request.AssignedToId.Value, lead.Id, lead.CustomerName, HttpContext.RequestAborted);
         return Created($"/api/leads/{lead.Id}", new { lead.Id });
     }
 
@@ -83,6 +88,7 @@ public class LeadsController(CrmDbContext db, ILeadAssignmentService assignmentS
         var lead = await db.Leads.FindAsync(id);
         if (lead is null) return NotFound();
         if (User.IsInRole("SalesExecutive") && lead.AssignedToId != User.UserId()) return Forbid();
+        var previousAssignedToId = lead.AssignedToId;
         if (request.AssignedToId.HasValue)
         {
             if (!User.IsInRole("SuperAdmin") && !User.IsInRole("Admin"))
@@ -110,6 +116,11 @@ public class LeadsController(CrmDbContext db, ILeadAssignmentService assignmentS
         lead.Remarks = request.Remarks ?? lead.Remarks;
 
         await db.SaveChangesAsync();
+        if (request.AssignedToId.HasValue && request.AssignedToId != previousAssignedToId)
+        {
+            await notificationService.SendLeadAssignedAsync(
+                request.AssignedToId.Value, lead.Id, lead.CustomerName, HttpContext.RequestAborted);
+        }
         return NoContent();
     }
 }
