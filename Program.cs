@@ -66,6 +66,12 @@ builder.Services.AddSingleton(jwtOptions);
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<ILeadAssignmentService, LeadAssignmentService>();
+builder.Services.Configure<OneSignalOptions>(builder.Configuration.GetSection("OneSignal"));
+builder.Services.AddHttpClient<IOneSignalNotificationService, OneSignalNotificationService>(client =>
+{
+    client.BaseAddress = new Uri("https://api.onesignal.com/");
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
