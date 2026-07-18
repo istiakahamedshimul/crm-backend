@@ -24,6 +24,7 @@ public class LeadAssignmentService(CrmDbContext db) : ILeadAssignmentService
 
         var conflictingLead = await db.Leads
             .Where(x => x.Id != ignoreLeadId)
+            .Where(x => x.Status != LeadStatus.Booked)
             .Where(x => x.AssignedToId.HasValue && x.AssignedToId != salesExecutiveId)
             .Where(x =>
                 x.Phone == normalizedPhone ||
