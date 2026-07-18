@@ -51,7 +51,28 @@ public class LeadsController(
             return BadRequest(new { message = "Selected project was not found." });
         }
 
-        var conflict = await assignmentService.GetAssignmentConflictAsync(request.Phone, request.Email, request.AssignedToId.Value);
+        Customer? customer = null;
+        if (request.CustomerId.HasValue)
+        {
+            customer = await db.Customers.FindAsync(request.CustomerId.Value);
+            if (customer is null) return BadRequest(new { message = "Selected customer was not found." });
+
+            var hasActiveAssignment = await db.Leads.AnyAsync(lead =>
+                lead.Status != LeadStatus.Booked &&
+                (lead.Phone == customer.Phone ||
+                 (customer.Email != null && lead.Email != null && lead.Email.ToLower() == customer.Email.ToLower())));
+            if (hasActiveAssignment)
+                return Conflict(new { message = "This customer is already assigned. They can be assigned again after the current lead is Booked." });
+        }
+
+        var customerName = customer?.Name ?? request.CustomerName;
+        var phone = customer?.Phone ?? request.Phone;
+        var alternativePhone = customer?.AlternativePhone ?? request.AlternativePhone;
+        var email = customer?.Email ?? request.Email;
+        var address = customer?.Address ?? request.Address;
+
+        var conflict = await assignmentService.GetAssignmentConflictAsync(
+            phone, email, request.AssignedToId.Value, ignoreCustomerId: customer?.Id);
         if (conflict is not null)
         {
             return Conflict(new { message = conflict });
@@ -59,11 +80,11 @@ public class LeadsController(
 
         var lead = new Lead
         {
-            CustomerName = request.CustomerName,
-            Phone = request.Phone,
-            AlternativePhone = request.AlternativePhone,
-            Email = request.Email,
-            Address = request.Address,
+            CustomerName = customerName,
+            Phone = phone,
+            AlternativePhone = alternativePhone,
+            Email = email,
+            Address = address,
             BudgetRange = request.BudgetRange,
             PreferredLocation = request.PreferredLocation,
             ProjectId = request.ProjectId,
