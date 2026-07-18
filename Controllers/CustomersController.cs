@@ -40,6 +40,22 @@ public class CustomersController(CrmDbContext db, ILeadAssignmentService assignm
         return Ok(customers);
     }
 
+    [HttpGet("available-for-lead")]
+    [Authorize(Roles = "SuperAdmin,Admin")]
+    public async Task<ActionResult> GetCustomersAvailableForLead()
+    {
+        var customers = await db.Customers
+            .Where(customer => !db.Leads.Any(lead =>
+                lead.Status != LeadStatus.Booked &&
+                (lead.Phone == customer.Phone ||
+                 (customer.Email != null && lead.Email != null && lead.Email.ToLower() == customer.Email.ToLower()))))
+            .OrderBy(x => x.Name)
+            .Select(x => new { x.Id, x.Name, x.Phone, x.AlternativePhone, x.Email, x.Address, x.ProjectId })
+            .ToListAsync();
+
+        return Ok(customers);
+    }
+
     [HttpPut("{id:int}/project")]
     [Authorize(Roles = "SuperAdmin,Admin,SalesExecutive")]
     public async Task<ActionResult> UpdateProject(int id, UpdateCustomerProjectRequest request)
