@@ -39,7 +39,7 @@ namespace backend.Migrations
                     b.Property<int>("CustomerId")
                         .HasColumnType("int");
 
-                    b.Property<int>("InvoiceId")
+                    b.Property<int?>("InvoiceId")
                         .HasColumnType("int");
 
                     b.Property<decimal>("PaymentAmount")
@@ -374,6 +374,10 @@ namespace backend.Migrations
                     b.Property<decimal>("Amount")
                         .HasColumnType("decimal(65,30)");
 
+                    b.Property<string>("CollectionNumber")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
@@ -383,7 +387,7 @@ namespace backend.Migrations
                     b.Property<string>("GatewayTransactionId")
                         .HasColumnType("longtext");
 
-                    b.Property<int>("InvoiceId")
+                    b.Property<int?>("InvoiceId")
                         .HasColumnType("int");
 
                     b.Property<int>("Method")
@@ -414,6 +418,9 @@ namespace backend.Migrations
                         .HasColumnType("int");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CollectionNumber")
+                        .IsUnique();
 
                     b.HasIndex("CustomerId");
 
@@ -831,9 +838,7 @@ namespace backend.Migrations
 
                     b.HasOne("backend.Models.Invoice", "Invoice")
                         .WithMany()
-                        .HasForeignKey("InvoiceId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .HasForeignKey("InvoiceId");
 
                     b.HasOne("backend.Models.User", "SalesExecutive")
                         .WithMany()

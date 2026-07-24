@@ -40,6 +40,18 @@ public class CustomersController(CrmDbContext db, ILeadAssignmentService assignm
         return Ok(customers);
     }
 
+    [HttpGet("booked")]
+    public async Task<ActionResult> GetBookedCustomers()
+    {
+        var query = db.Customers
+            .Include(x => x.Lead)
+            .Where(x => x.LeadId.HasValue && x.Lead != null && x.Lead.Status == LeadStatus.Booked);
+        if (User.IsInRole("SalesExecutive")) query = query.Where(x => x.AssignedToId == User.UserId());
+        return Ok(await query.OrderBy(x => x.Name)
+            .Select(x => new { x.Id, x.LeadId, x.Name, x.Phone, x.Email, x.ProjectId, x.PaymentStatus })
+            .ToListAsync());
+    }
+
     [HttpGet("available-for-lead")]
     [Authorize(Roles = "SuperAdmin,Admin")]
     public async Task<ActionResult> GetCustomersAvailableForLead()
