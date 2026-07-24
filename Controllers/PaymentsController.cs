@@ -31,7 +31,8 @@ public class PaymentsController(CrmDbContext db, IPaymentService paymentService)
             x.Method,
             x.Status,
             x.ProofUrl,
-            x.RejectReason
+            x.RejectReason,
+            x.CreatedAt
         }).ToListAsync();
 
         return Ok(payments);
