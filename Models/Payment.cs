@@ -5,8 +5,9 @@ public class Payment
     public int Id { get; set; }
     public int CustomerId { get; set; }
     public Customer Customer { get; set; } = null!;
-    public int InvoiceId { get; set; }
-    public Invoice Invoice { get; set; } = null!;
+    public int? InvoiceId { get; set; }
+    public Invoice? Invoice { get; set; }
+    public string CollectionNumber { get; set; } = "";
     public int SalesExecutiveId { get; set; }
     public User SalesExecutive { get; set; } = null!;
     public decimal Amount { get; set; }

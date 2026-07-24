@@ -63,6 +63,16 @@ public class FollowUpsController(CrmDbContext db) : ControllerBase
         lead.Status = request.NewLeadStatus ?? lead.Status;
         lead.LastFollowUpAt = DateTime.UtcNow;
         lead.NextFollowUpAt = request.NextFollowUpAt;
+        if (lead.Status == LeadStatus.Booked && !await db.Customers.AnyAsync(x => x.LeadId == lead.Id))
+        {
+            db.Customers.Add(new Customer
+            {
+                LeadId = lead.Id, Name = lead.CustomerName, Phone = lead.Phone,
+                AlternativePhone = lead.AlternativePhone, Email = lead.Email, Address = lead.Address,
+                AssignedToId = lead.AssignedToId, ProjectId = lead.ProjectId,
+                PaymentStatus = "Positive"
+            });
+        }
         await db.SaveChangesAsync();
 
         foreach (var proof in request.Proofs ?? [])

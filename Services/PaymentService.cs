@@ -8,21 +8,19 @@ public class PaymentService(CrmDbContext db) : IPaymentService
 {
     public async Task ApplyInvoiceAndCommissionAsync(Payment payment)
     {
-        var invoice = await db.Invoices.FirstAsync(x => x.Id == payment.InvoiceId);
-        var approvedAmount = await db.Payments
-            .Where(x => x.InvoiceId == invoice.Id && x.Status == PaymentStatus.Approved)
-            .SumAsync(x => x.Amount);
-
-        invoice.Status = approvedAmount >= invoice.FinalAmount ? InvoiceStatus.Paid : InvoiceStatus.PartiallyPaid;
-
-        var customer = await db.Customers.FindAsync(invoice.CustomerId);
-        if (customer is not null)
+        if (payment.Amount <= 0) throw new InvalidOperationException("Collection amount must be greater than zero.");
+        if (payment.InvoiceId.HasValue)
         {
-            customer.PaymentStatus = invoice.Status == InvoiceStatus.Paid ? "Paid" : "Partial";
+            var invoice = await db.Invoices.FirstAsync(x => x.Id == payment.InvoiceId.Value);
+            var approvedAmount = await db.Payments
+                .Where(x => x.InvoiceId == invoice.Id && x.Status == PaymentStatus.Approved && x.Id != payment.Id)
+                .SumAsync(x => x.Amount) + payment.Amount;
+            invoice.Status = approvedAmount >= invoice.FinalAmount ? InvoiceStatus.Paid : InvoiceStatus.PartiallyPaid;
         }
 
-        var rule = await db.CommissionRules.FirstOrDefaultAsync(x => x.IsActive);
-        var percentage = rule?.Percentage ?? 2m;
+        var customer = await db.Customers.FindAsync(payment.CustomerId);
+        if (customer is not null) customer.PaymentStatus = "Positive";
+        const decimal percentage = 7m;
         db.Commissions.Add(new Commission
         {
             SalesExecutiveId = payment.SalesExecutiveId,
