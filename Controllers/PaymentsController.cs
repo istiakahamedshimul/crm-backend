@@ -18,14 +18,14 @@ public class PaymentsController(CrmDbContext db, IPaymentService paymentService)
     [HttpGet]
     public async Task<ActionResult> GetPayments()
     {
-        var query = db.Payments.Include(x => x.Customer).Include(x => x.Invoice).Include(x => x.SalesExecutive).AsQueryable();
+        var query = db.Payments.Include(x => x.Customer).Include(x => x.SalesExecutive).AsQueryable();
         if (User.IsInRole("SalesExecutive")) query = query.Where(x => x.SalesExecutiveId == User.UserId());
 
         var payments = await query.OrderByDescending(x => x.CreatedAt).Select(x => new
         {
             x.Id,
             Customer = x.Customer.Name,
-            x.Invoice.InvoiceNumber,
+            x.CollectionNumber,
             SalesExecutive = x.SalesExecutive.FullName,
             x.Amount,
             x.Method,
@@ -37,16 +37,21 @@ public class PaymentsController(CrmDbContext db, IPaymentService paymentService)
         return Ok(payments);
     }
 
-    [HttpPost("manual")]
-    public async Task<ActionResult> SubmitManualPayment(SubmitPaymentRequest request)
+    [HttpPost("collection")]
+    public async Task<ActionResult> SubmitCollection(SubmitCollectionRequest request)
     {
-        var invoice = await db.Invoices.FindAsync(request.InvoiceId);
-        if (invoice is null) return BadRequest(new { message = "Invoice not found." });
+        if (request.Amount <= 0) return BadRequest(new { message = "Collection amount must be greater than zero." });
+        if (string.IsNullOrWhiteSpace(request.ProofUrl)) return BadRequest(new { message = "A receipt is required." });
+        var customer = await db.Customers.FindAsync(request.CustomerId);
+        if (customer is null) return BadRequest(new { message = "Booked customer not found." });
+        if (!customer.LeadId.HasValue || !await db.Leads.AnyAsync(x => x.Id == customer.LeadId && x.Status == LeadStatus.Booked))
+            return BadRequest(new { message = "Collections can only be submitted for customers with Booked lead status." });
+        if (User.IsInRole("SalesExecutive") && customer.AssignedToId != User.UserId()) return Forbid();
 
         var payment = new Payment
         {
-            CustomerId = invoice.CustomerId,
-            InvoiceId = invoice.Id,
+            CustomerId = customer.Id,
+            CollectionNumber = $"COL-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid().ToString("N")[..6].ToUpperInvariant()}",
             SalesExecutiveId = User.UserId(),
             Amount = request.Amount,
             Method = request.Method,
@@ -65,8 +70,9 @@ public class PaymentsController(CrmDbContext db, IPaymentService paymentService)
     [Authorize(Roles = "SuperAdmin,Admin,Accountant")]
     public async Task<ActionResult> ApprovePayment(int id)
     {
-        var payment = await db.Payments.Include(x => x.Invoice).FirstOrDefaultAsync(x => x.Id == id);
+        var payment = await db.Payments.FirstOrDefaultAsync(x => x.Id == id);
         if (payment is null) return NotFound();
+        if (payment.Amount <= 0) return BadRequest(new { message = "Collection amount must be greater than zero." });
         if (payment.Status == PaymentStatus.Approved) return Ok(new { message = "Already approved." });
 
         payment.Status = PaymentStatus.Approved;
@@ -105,6 +111,7 @@ public class PaymentsController(CrmDbContext db, IPaymentService paymentService)
         {
             CustomerId = invoice.CustomerId,
             InvoiceId = invoice.Id,
+            CollectionNumber = $"COL-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid().ToString("N")[..6].ToUpperInvariant()}",
             SalesExecutiveId = invoice.SalesExecutiveId,
             Amount = request.Amount,
             Method = PaymentMethod.OnlineGateway,
