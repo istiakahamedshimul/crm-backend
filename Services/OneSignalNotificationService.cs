@@ -31,7 +31,7 @@ public class OneSignalNotificationService(
             contents = new { en = $"New lead assigned: {customerName}" },
             // Android plays this bundled ten-second tone even when Flutter is not running.
             android_sound = "lead_notification",
-            existing_android_channel_id = "lead_assignments_v1",
+            existing_android_channel_id = "lead_assignments_tone_v2",
             include_aliases = new Dictionary<string, string[]>
             {
                 ["external_id"] = [$"crm-user-{salesExecutiveId}"]

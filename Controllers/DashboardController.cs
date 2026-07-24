@@ -19,7 +19,7 @@ public class DashboardController(CrmDbContext db) : ControllerBase
         return Ok(new
         {
             leads = await db.Leads.CountAsync(),
-            customers = await db.Customers.CountAsync(),
+            customers = await db.Leads.CountAsync(x => x.Status == LeadStatus.Booked),
             projects = await db.Projects.CountAsync(),
             invoices = await db.Invoices.CountAsync(),
             unpaidInvoices = await db.Invoices.CountAsync(x => x.Status != InvoiceStatus.Paid),

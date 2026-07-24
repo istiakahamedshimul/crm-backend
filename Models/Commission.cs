@@ -6,7 +6,7 @@ public class Commission
     public int SalesExecutiveId { get; set; }
     public User SalesExecutive { get; set; } = null!;
     public int CustomerId { get; set; }
-    public int InvoiceId { get; set; }
+    public int? InvoiceId { get; set; }
     public int PaymentId { get; set; }
     public Payment Payment { get; set; } = null!;
     public decimal PaymentAmount { get; set; }

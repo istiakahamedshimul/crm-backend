@@ -47,7 +47,15 @@ public static class SeedData
 
         if (!db.CommissionRules.Any())
         {
-            db.CommissionRules.Add(new CommissionRule { Name = "Default 2%", Percentage = 2m, IsActive = true });
+            db.CommissionRules.Add(new CommissionRule { Name = "Default 7%", Percentage = 7m, IsActive = true });
+        }
+        else
+        {
+            foreach (var rule in db.CommissionRules.Where(x => x.IsActive))
+            {
+                rule.Name = "Default 7%";
+                rule.Percentage = 7m;
+            }
         }
 
         db.SaveChanges();
