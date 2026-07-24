@@ -30,7 +30,7 @@ public class PaymentService(CrmDbContext db) : IPaymentService
             PaymentAmount = payment.Amount,
             Percentage = percentage,
             Amount = Math.Round(payment.Amount * percentage / 100m, 2),
-            Status = CommissionStatus.Pending
+            Status = CommissionStatus.Approved
         });
     }
 }
