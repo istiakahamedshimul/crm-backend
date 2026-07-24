@@ -15,9 +15,14 @@ public class DashboardController(CrmDbContext db) : ControllerBase
     [HttpGet]
     public async Task<ActionResult> GetSummary()
     {
-        var totalCollection = await db.Payments.Where(x => x.Status == PaymentStatus.Approved).SumAsync(x => x.Amount);
-        var rejectedCollectionAmount = await db.Payments.Where(x => x.Status == PaymentStatus.Rejected).SumAsync(x => x.Amount);
-        var reversedCommission = await db.Commissions.Where(x => x.Status == CommissionStatus.Rejected).SumAsync(x => x.Amount);
+        var now = DateTime.UtcNow;
+        var monthStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+        var nextMonthStart = monthStart.AddMonths(1);
+        var totalCollection = await db.Payments
+            .Where(x => x.Status == PaymentStatus.Approved &&
+                        x.VerifiedAt >= monthStart &&
+                        x.VerifiedAt < nextMonthStart)
+            .SumAsync(x => x.Amount);
         return Ok(new
         {
             leads = await db.Leads.CountAsync(),
@@ -28,10 +33,8 @@ public class DashboardController(CrmDbContext db) : ControllerBase
             pendingPayments = await db.Payments.CountAsync(x => x.Status == PaymentStatus.Pending),
             approvedPayments = await db.Payments.CountAsync(x => x.Status == PaymentStatus.Approved),
             totalCollection,
-            rejectedCollectionAmount = -rejectedCollectionAmount,
             pendingCommission = await db.Commissions.Where(x => x.Status == CommissionStatus.Pending).SumAsync(x => x.Amount),
-            paidCommission = await db.Commissions.Where(x => x.Status == CommissionStatus.Paid).SumAsync(x => x.Amount),
-            reversedCommission = -reversedCommission
+            paidCommission = await db.Commissions.Where(x => x.Status == CommissionStatus.Paid).SumAsync(x => x.Amount)
         });
     }
 }
