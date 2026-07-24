@@ -25,8 +25,9 @@ public class CommissionsController(CrmDbContext db) : ControllerBase
         return Ok(new
         {
             totalEarned = rows.Where(x => x.Status != CommissionStatus.Rejected).Sum(x => x.Amount),
-            pending = rows.Where(x => x.Status == CommissionStatus.Pending).Sum(x => x.Amount),
-            paid = rows.Where(x => x.Status == CommissionStatus.Paid).Sum(x => x.Amount),
+            commission = rows.Where(x => x.Status != CommissionStatus.Rejected).Sum(x => x.Amount),
+            pending = 0,
+            paid = 0,
             history = rows.OrderByDescending(x => x.CreatedAt).Select(x => new
             {
                 x.Id,
@@ -34,7 +35,7 @@ public class CommissionsController(CrmDbContext db) : ControllerBase
                 PaymentAmount = x.Status == CommissionStatus.Rejected ? -x.PaymentAmount : x.PaymentAmount,
                 x.Percentage,
                 Amount = x.Status == CommissionStatus.Rejected ? -x.Amount : x.Amount,
-                x.Status,
+                Status = x.Status == CommissionStatus.Rejected ? CommissionStatus.Rejected : CommissionStatus.Approved,
                 x.CreatedAt
             })
         });
@@ -53,7 +54,7 @@ public class CommissionsController(CrmDbContext db) : ControllerBase
                 PaymentAmount = x.Status == CommissionStatus.Rejected ? -x.PaymentAmount : x.PaymentAmount,
                 x.Percentage,
                 Amount = x.Status == CommissionStatus.Rejected ? -x.Amount : x.Amount,
-                x.Status,
+                Status = x.Status == CommissionStatus.Rejected ? CommissionStatus.Rejected : CommissionStatus.Approved,
                 x.CreatedAt
             })
             .ToListAsync();

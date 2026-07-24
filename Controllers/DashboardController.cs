@@ -33,8 +33,7 @@ public class DashboardController(CrmDbContext db) : ControllerBase
             pendingPayments = await db.Payments.CountAsync(x => x.Status == PaymentStatus.Pending),
             approvedPayments = await db.Payments.CountAsync(x => x.Status == PaymentStatus.Approved),
             totalCollection,
-            pendingCommission = await db.Commissions.Where(x => x.Status == CommissionStatus.Pending).SumAsync(x => x.Amount),
-            paidCommission = await db.Commissions.Where(x => x.Status == CommissionStatus.Paid).SumAsync(x => x.Amount)
+            totalCommission = await db.Commissions.Where(x => x.Status != CommissionStatus.Rejected).SumAsync(x => x.Amount)
         });
     }
 }
