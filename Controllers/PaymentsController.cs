@@ -27,7 +27,7 @@ public class PaymentsController(CrmDbContext db, IPaymentService paymentService)
             Customer = x.Customer.Name,
             x.CollectionNumber,
             SalesExecutive = x.SalesExecutive.FullName,
-            x.Amount,
+            Amount = x.Status == PaymentStatus.Rejected ? -x.Amount : x.Amount,
             x.Method,
             x.Status,
             x.ProofUrl,
@@ -74,6 +74,8 @@ public class PaymentsController(CrmDbContext db, IPaymentService paymentService)
         if (payment is null) return NotFound();
         if (payment.Amount <= 0) return BadRequest(new { message = "Collection amount must be greater than zero." });
         if (payment.Status == PaymentStatus.Approved) return Ok(new { message = "Already approved." });
+        if (payment.Status == PaymentStatus.Rejected)
+            return Conflict(new { message = "A rejected collection is final and cannot be approved again." });
 
         payment.Status = PaymentStatus.Approved;
         payment.VerifiedById = User.UserId();
@@ -90,11 +92,46 @@ public class PaymentsController(CrmDbContext db, IPaymentService paymentService)
     {
         var payment = await db.Payments.FindAsync(id);
         if (payment is null) return NotFound();
+        if (payment.Status == PaymentStatus.Rejected)
+            return Conflict(new { message = "This collection was already rejected and cannot be changed." });
+        if (string.IsNullOrWhiteSpace(request.Reason))
+            return BadRequest(new { message = "A rejection reason is required." });
 
         payment.Status = PaymentStatus.Rejected;
         payment.VerifiedById = User.UserId();
         payment.VerifiedAt = DateTime.UtcNow;
-        payment.RejectReason = request.Reason;
+        payment.RejectReason = request.Reason.Trim();
+
+        var commissions = await db.Commissions.Where(x => x.PaymentId == payment.Id).ToListAsync();
+        foreach (var commission in commissions) commission.Status = CommissionStatus.Rejected;
+
+        if (payment.InvoiceId.HasValue)
+        {
+            var invoice = await db.Invoices.FindAsync(payment.InvoiceId.Value);
+            if (invoice is not null)
+            {
+                var remainingApproved = await db.Payments
+                    .Where(x => x.InvoiceId == invoice.Id &&
+                                x.Status == PaymentStatus.Approved &&
+                                x.Id != payment.Id)
+                    .SumAsync(x => x.Amount);
+                invoice.Status = remainingApproved <= 0
+                    ? InvoiceStatus.Generated
+                    : remainingApproved >= invoice.FinalAmount
+                        ? InvoiceStatus.Paid
+                        : InvoiceStatus.PartiallyPaid;
+            }
+        }
+
+        var customer = await db.Customers.FindAsync(payment.CustomerId);
+        if (customer is not null)
+        {
+            var hasOtherApprovedCollection = await db.Payments.AnyAsync(x =>
+                x.CustomerId == payment.CustomerId &&
+                x.Status == PaymentStatus.Approved &&
+                x.Id != payment.Id);
+            customer.PaymentStatus = hasOtherApprovedCollection ? "Positive" : "Unpaid";
+        }
         await db.SaveChangesAsync();
 
         return Ok(new { message = "Payment rejected." });

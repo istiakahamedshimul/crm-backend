@@ -45,10 +45,19 @@ public class CustomersController(CrmDbContext db, ILeadAssignmentService assignm
     {
         var query = db.Customers
             .Include(x => x.Lead)
+            .Include(x => x.Project)
+            .ThenInclude(x => x!.SubGroup)
             .Where(x => x.LeadId.HasValue && x.Lead != null && x.Lead.Status == LeadStatus.Booked);
         if (User.IsInRole("SalesExecutive")) query = query.Where(x => x.AssignedToId == User.UserId());
         return Ok(await query.OrderBy(x => x.Name)
-            .Select(x => new { x.Id, x.LeadId, x.Name, x.Phone, x.Email, x.ProjectId, x.PaymentStatus })
+            .Select(x => new
+            {
+                x.Id, x.LeadId, x.Name, x.Phone, x.Email, x.ProjectId, x.PaymentStatus,
+                Project = x.Project == null ? null : x.Project.Name,
+                ProjectType = x.Project == null ? (ProjectType?)null : x.Project.Type,
+                SubGroupId = x.Project == null ? (int?)null : x.Project.SubGroupId,
+                SubGroup = x.Project == null ? null : x.Project.SubGroup.Name
+            })
             .ToListAsync());
     }
 
