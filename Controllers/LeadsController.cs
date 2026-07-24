@@ -252,7 +252,10 @@ public class LeadsController(
         lead.NextFollowUpAt = request.NextFollowUpAt ?? lead.NextFollowUpAt;
         lead.Remarks = request.Remarks ?? lead.Remarks;
 
-        if (lead.Status == LeadStatus.Booked && !await db.Customers.AnyAsync(x => x.LeadId == lead.Id))
+        var bookedCustomer = lead.Status == LeadStatus.Booked
+            ? await db.Customers.FirstOrDefaultAsync(x => x.LeadId == lead.Id)
+            : null;
+        if (lead.Status == LeadStatus.Booked && bookedCustomer is null)
         {
             db.Customers.Add(new Customer
             {
@@ -261,6 +264,10 @@ public class LeadsController(
                 AssignedToId = lead.AssignedToId, ProjectId = lead.ProjectId,
                 PaymentStatus = "Positive"
             });
+        }
+        else if (bookedCustomer is not null)
+        {
+            bookedCustomer.ProjectId = lead.ProjectId;
         }
         await db.SaveChangesAsync();
         if (request.AssignedToId.HasValue && request.AssignedToId != previousAssignedToId)
