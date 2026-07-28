@@ -9,7 +9,6 @@ public class FollowUp
     public Customer? Customer { get; set; }
     public FollowUpType Type { get; set; }
     public string Summary { get; set; } = "";
-    public string? CustomerResponse { get; set; }
     public DateTime? NextFollowUpAt { get; set; }
     public int CreatedById { get; set; }
     public User CreatedBy { get; set; } = null!;
