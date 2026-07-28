@@ -26,7 +26,7 @@ public class OneSignalNotificationService(
         int salesExecutiveId, int leadId, string customerName, CancellationToken cancellationToken = default)
     {
         await SendAsync(salesExecutiveId, leadId, customerName, "Lead follow-up overdue",
-            $"Please follow up with {customerName}. This lead will return to the unassigned queue if no action is recorded.",
+            $"Please follow up with {customerName} as soon as possible. If no follow-up activity is recorded, this lead will be automatically returned to the admin queue for reassignment.",
             cancellationToken);
     }
 
