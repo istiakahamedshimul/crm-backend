@@ -31,7 +31,6 @@ public class FollowUpsController(CrmDbContext db) : ControllerBase
                 SalesExecutive = x.CreatedBy.FullName,
                 x.Type,
                 x.Summary,
-                x.CustomerResponse,
                 x.NextFollowUpAt,
                 x.CreatedAt,
                 Proofs = x.Proofs.Select(p => new { p.ProofType, p.FileUrl })
@@ -54,7 +53,6 @@ public class FollowUpsController(CrmDbContext db) : ControllerBase
             CustomerId = request.CustomerId,
             Type = request.Type,
             Summary = request.Summary,
-            CustomerResponse = request.CustomerResponse,
             NextFollowUpAt = request.NextFollowUpAt,
             CreatedById = User.UserId()
         };
