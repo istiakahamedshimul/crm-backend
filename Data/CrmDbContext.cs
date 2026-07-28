@@ -19,6 +19,7 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options) : DbContext(op
     public DbSet<CommissionRule> CommissionRules => Set<CommissionRule>();
     public DbSet<VehicleBooking> VehicleBookings => Set<VehicleBooking>();
     public DbSet<Vehicle> Vehicles => Set<Vehicle>();
+    public DbSet<LeadAutomationSettings> LeadAutomationSettings => Set<LeadAutomationSettings>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -105,7 +105,7 @@ public class LeadsController(
                 Remarks = NullIfBlank(row.GetValueOrDefault("Remarks")),
                 Source = LeadSource.Other, Priority = LeadPriority.Warm,
                 Status = assignedId.HasValue ? LeadStatus.Assigned : LeadStatus.New,
-                AssignedToId = assignedId, CreatedById = User.UserId()
+                AssignedToId = assignedId, AssignedAt = assignedId.HasValue ? DateTime.UtcNow : null, CreatedById = User.UserId()
             };
             db.Leads.Add(lead);
             if (assignedId.HasValue) importedAssignedLeads.Add(lead);
@@ -206,6 +206,7 @@ public class LeadsController(
             Source = request.Source,
             Status = LeadStatus.Assigned,
             AssignedToId = request.AssignedToId,
+            AssignedAt = DateTime.UtcNow,
             CreatedById = User.UserId(),
             Remarks = request.Remarks
         };
@@ -248,6 +249,11 @@ public class LeadsController(
 
         lead.Status = request.Status ?? lead.Status;
         lead.AssignedToId = request.AssignedToId ?? lead.AssignedToId;
+        if (request.AssignedToId.HasValue && request.AssignedToId != previousAssignedToId)
+        {
+            lead.AssignedAt = DateTime.UtcNow;
+            lead.LastAssignmentReminderAt = null;
+        }
         lead.ProjectId = request.ProjectId ?? lead.ProjectId;
         lead.NextFollowUpAt = request.NextFollowUpAt ?? lead.NextFollowUpAt;
         lead.Remarks = request.Remarks ?? lead.Remarks;
