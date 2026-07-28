@@ -42,6 +42,8 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options) : DbContext(op
         modelBuilder.Entity<VehicleBooking>().HasOne(x => x.Project).WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<VehicleBooking>().HasOne(x => x.Vehicle).WithMany().HasForeignKey(x => x.VehicleId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<Vehicle>().HasIndex(x => x.RegistrationNumber).IsUnique();
+        modelBuilder.Entity<LeadAutomationSettings>().Property(x => x.UnassignAfterHours).HasPrecision(10, 4);
+        modelBuilder.Entity<LeadAutomationSettings>().Property(x => x.ReminderIntervalHours).HasPrecision(10, 4);
         modelBuilder.Entity<LeadReturn>().HasOne(x => x.Lead).WithMany().HasForeignKey(x => x.LeadId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<LeadReturn>().HasOne(x => x.SalesExecutive).WithMany().HasForeignKey(x => x.SalesExecutiveId).OnDelete(DeleteBehavior.Restrict);
     }

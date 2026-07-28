@@ -23,8 +23,10 @@ public class LeadAutomationSettingsController(CrmDbContext db) : ControllerBase
     [HttpPut]
     public async Task<ActionResult<LeadAutomationSettingsDto>> Update(UpdateLeadAutomationSettingsRequest request)
     {
-        if (request.UnassignAfterHours is < 1 or > 720 || request.ReminderIntervalHours is < 1 or > 168)
-            return BadRequest(new { message = "Unassign time must be 1-720 hours and reminder interval must be 1-168 hours." });
+        const decimal oneMinuteInHours = 1m / 60m;
+        if (request.UnassignAfterHours < oneMinuteInHours || request.UnassignAfterHours > 720 ||
+            request.ReminderIntervalHours < oneMinuteInHours || request.ReminderIntervalHours > 168)
+            return BadRequest(new { message = "Times may use fractional hours but cannot be shorter than one minute. Maximums are 720 return hours and 168 reminder hours." });
 
         var settings = await GetOrCreateAsync();
         settings.UnassignAfterHours = request.UnassignAfterHours;

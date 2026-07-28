@@ -34,7 +34,7 @@ public class LeadAutomationWorker(
             foreach (var lead in assigned)
             {
                 var assignedAt = lead.AssignedAt ?? lead.CreatedAt;
-                if (lead.LastFollowUpAt == null && assignedAt.AddHours(settings.UnassignAfterHours) <= now)
+                if (lead.LastFollowUpAt == null && assignedAt.AddHours((double)settings.UnassignAfterHours) <= now)
                 {
                     db.LeadReturns.Add(new LeadReturn
                     {
@@ -53,7 +53,7 @@ public class LeadAutomationWorker(
                 }
 
                 var reminderBase = lead.LastAssignmentReminderAt ?? assignedAt;
-                if (reminderBase.AddHours(settings.ReminderIntervalHours) <= now)
+                if (reminderBase.AddHours((double)settings.ReminderIntervalHours) <= now)
                 {
                     await notifier.SendLeadFollowUpReminderAsync(
                         lead.AssignedToId!.Value, lead.Id, lead.CustomerName, cancellationToken);
