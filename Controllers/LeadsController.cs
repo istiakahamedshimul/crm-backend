@@ -140,10 +140,35 @@ public class LeadsController(
             query = query.Where(x => x.Project != null && x.Project.Type == projectType);
 
         var leads = await query.OrderByDescending(x => x.CreatedAt)
-            .Select(x => new LeadDto(x.Id, x.CustomerName, x.Phone, x.Email, x.Source, x.Status, x.AssignedToId, x.AssignedTo == null ? null : x.AssignedTo.FullName, x.ProjectId, x.Project == null ? null : x.Project.Name, x.Project == null ? null : x.Project.Type, x.NextFollowUpAt))
+            .Select(x => new LeadDto(x.Id, x.CustomerName, x.Phone, x.AlternativePhone, x.Email, x.Address, x.BudgetRange, x.PreferredLocation, x.Source, x.Status, x.AssignedToId, x.AssignedTo == null ? null : x.AssignedTo.FullName, x.ProjectId, x.Project == null ? null : x.Project.Name, x.Project == null ? null : x.Project.Type, x.NextFollowUpAt, x.Remarks, x.AssignedAt, x.CreatedAt))
             .ToListAsync();
 
         return Ok(leads);
+    }
+
+    [HttpGet("returned")]
+    [Authorize(Roles = "SuperAdmin,Admin,Manager")]
+    public async Task<ActionResult> GetReturnedLeads()
+    {
+        var history = await db.LeadReturns
+            .Include(x => x.Lead)
+            .Include(x => x.SalesExecutive)
+            .OrderByDescending(x => x.ReturnedAt)
+            .Select(x => new
+            {
+                x.Id,
+                x.LeadId,
+                x.Lead.CustomerName,
+                x.Lead.Phone,
+                SalesExecutive = x.SalesExecutive.FullName,
+                x.AssignedAt,
+                x.ReturnedAt,
+                x.NotificationCount,
+                CurrentStatus = x.Lead.Status,
+                CurrentAssignedTo = x.Lead.AssignedTo == null ? null : x.Lead.AssignedTo.FullName
+            })
+            .ToListAsync();
+        return Ok(history);
     }
 
     [HttpPost]
@@ -225,6 +250,25 @@ public class LeadsController(
         if (lead is null) return NotFound();
         if (User.IsInRole("SalesExecutive") && lead.AssignedToId != User.UserId()) return Forbid();
         var previousAssignedToId = lead.AssignedToId;
+        if ((User.IsInRole("SuperAdmin") || User.IsInRole("Admin")) &&
+            request.CustomerName is not null && request.Phone is not null)
+        {
+            if (string.IsNullOrWhiteSpace(request.CustomerName) || string.IsNullOrWhiteSpace(request.Phone))
+                return BadRequest(new { message = "Lead name and phone are required." });
+            var normalizedEmail = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email.Trim();
+            if (await db.Leads.AnyAsync(x => x.Id != id &&
+                (x.Phone == request.Phone.Trim() ||
+                 (normalizedEmail != null && x.Email != null && x.Email.ToLower() == normalizedEmail.ToLower()))))
+                return Conflict(new { message = "Another lead already uses this phone or email." });
+
+            lead.CustomerName = request.CustomerName.Trim();
+            lead.Phone = request.Phone.Trim();
+            lead.AlternativePhone = string.IsNullOrWhiteSpace(request.AlternativePhone) ? null : request.AlternativePhone.Trim();
+            lead.Email = normalizedEmail;
+            lead.Address = string.IsNullOrWhiteSpace(request.Address) ? null : request.Address.Trim();
+            lead.BudgetRange = string.IsNullOrWhiteSpace(request.BudgetRange) ? null : request.BudgetRange.Trim();
+            lead.PreferredLocation = string.IsNullOrWhiteSpace(request.PreferredLocation) ? null : request.PreferredLocation.Trim();
+        }
         if (request.AssignedToId.HasValue)
         {
             if (!User.IsInRole("SuperAdmin") && !User.IsInRole("Admin"))
@@ -253,6 +297,7 @@ public class LeadsController(
         {
             lead.AssignedAt = DateTime.UtcNow;
             lead.LastAssignmentReminderAt = null;
+            lead.AssignmentReminderCount = 0;
         }
         lead.ProjectId = request.ProjectId ?? lead.ProjectId;
         lead.NextFollowUpAt = request.NextFollowUpAt ?? lead.NextFollowUpAt;
