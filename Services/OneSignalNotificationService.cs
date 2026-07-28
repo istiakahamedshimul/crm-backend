@@ -18,6 +18,21 @@ public class OneSignalNotificationService(
         string customerName,
         CancellationToken cancellationToken = default)
     {
+        await SendAsync(salesExecutiveId, leadId, customerName, "New lead assigned",
+            $"New lead assigned: {customerName}", cancellationToken);
+    }
+
+    public async Task SendLeadFollowUpReminderAsync(
+        int salesExecutiveId, int leadId, string customerName, CancellationToken cancellationToken = default)
+    {
+        await SendAsync(salesExecutiveId, leadId, customerName, "Lead follow-up overdue",
+            $"Please follow up with {customerName}. This lead will return to the unassigned queue if no action is recorded.",
+            cancellationToken);
+    }
+
+    private async Task SendAsync(int salesExecutiveId, int leadId, string customerName, string title, string message,
+        CancellationToken cancellationToken)
+    {
         if (string.IsNullOrWhiteSpace(settings.AppId) || string.IsNullOrWhiteSpace(settings.ApiKey))
         {
             logger.LogWarning("OneSignal notification skipped because AppId or ApiKey is not configured.");
@@ -27,8 +42,8 @@ public class OneSignalNotificationService(
         var payload = new
         {
             app_id = settings.AppId,
-            headings = new { en = "New lead assigned" },
-            contents = new { en = $"New lead assigned: {customerName}" },
+            headings = new { en = title },
+            contents = new { en = message },
             // Android plays this bundled ten-second tone even when Flutter is not running.
             android_sound = "lead_notification",
             existing_android_channel_id = "lead_assignments_tone_v3",

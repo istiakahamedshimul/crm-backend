@@ -21,6 +21,8 @@ public class Lead
     public int CreatedById { get; set; }
     public User CreatedBy { get; set; } = null!;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? AssignedAt { get; set; }
+    public DateTime? LastAssignmentReminderAt { get; set; }
     public DateTime? LastFollowUpAt { get; set; }
     public DateTime? NextFollowUpAt { get; set; }
     public string? Remarks { get; set; }

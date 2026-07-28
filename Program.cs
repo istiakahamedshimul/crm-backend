@@ -66,6 +66,7 @@ builder.Services.AddSingleton(jwtOptions);
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<ILeadAssignmentService, LeadAssignmentService>();
+builder.Services.AddHostedService<LeadAutomationWorker>();
 builder.Services.Configure<OneSignalOptions>(builder.Configuration.GetSection("OneSignal"));
 builder.Services.AddHttpClient<IOneSignalNotificationService, OneSignalNotificationService>(client =>
 {
