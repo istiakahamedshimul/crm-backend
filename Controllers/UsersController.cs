@@ -72,6 +72,7 @@ public class UsersController(CrmDbContext db) : ControllerBase
             metrics = new
             {
                 totalAssignedLeads = await leads.CountAsync(),
+                returnedLeads = await db.LeadReturns.CountAsync(x => x.SalesExecutiveId == id),
                 assignedStage = await leads.CountAsync(x => x.Status == LeadStatus.Assigned),
                 followingUp = await leads.CountAsync(x => activeFollowUpStatuses.Contains(x.Status)),
                 positiveCustomers = await db.Customers.CountAsync(x => x.AssignedToId == id && x.Lead != null && x.Lead.Status == LeadStatus.Booked),
