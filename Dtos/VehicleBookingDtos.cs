@@ -1,7 +1,7 @@
 namespace backend.Dtos;
 
 public record CreateVehicleBookingRequest(
-    int CustomerId,
+    int LeadId,
     int ProjectId,
     DateOnly VisitDate,
     TimeOnly VisitTime,

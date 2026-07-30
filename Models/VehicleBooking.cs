@@ -9,6 +9,8 @@ public class VehicleBooking
     // New bookings still require both IDs through the request DTOs/controllers.
     public int? CustomerId { get; set; }
     public Customer? Customer { get; set; }
+    public int? LeadId { get; set; }
+    public Lead? Lead { get; set; }
     public int? ProjectId { get; set; }
     public Project? Project { get; set; }
     public DateOnly VisitDate { get; set; }
