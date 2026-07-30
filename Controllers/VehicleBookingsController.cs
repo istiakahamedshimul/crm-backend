@@ -17,7 +17,7 @@ public class VehicleBookingsController(CrmDbContext db) : ControllerBase
     [HttpGet]
     public async Task<ActionResult> GetBookings()
     {
-        var query = db.VehicleBookings.Include(x => x.SalesExecutive).Include(x => x.Customer)
+        var query = db.VehicleBookings.Include(x => x.SalesExecutive).Include(x => x.Customer).Include(x => x.Lead)
             .Include(x => x.Project).Include(x => x.Vehicle).AsQueryable();
         if (User.IsInRole("SalesExecutive")) query = query.Where(x => x.SalesExecutiveId == User.UserId());
 
@@ -28,8 +28,13 @@ public class VehicleBookingsController(CrmDbContext db) : ControllerBase
                 x.SalesExecutiveId,
                 SalesExecutive = x.SalesExecutive.FullName,
                 x.CustomerId,
-                Customer = x.Customer == null ? "Legacy booking" : x.Customer.Name,
-                CustomerPhone = x.Customer == null ? null : x.Customer.Phone,
+                x.LeadId,
+                Customer = x.Lead != null
+                    ? x.Lead.CustomerName
+                    : x.Customer == null ? "Legacy booking" : x.Customer.Name,
+                CustomerPhone = x.Lead != null
+                    ? x.Lead.Phone
+                    : x.Customer == null ? null : x.Customer.Phone,
                 x.ProjectId,
                 Project = x.Project == null ? "Legacy booking" : x.Project.Name,
                 x.VisitDate,
@@ -55,8 +60,9 @@ public class VehicleBookingsController(CrmDbContext db) : ControllerBase
             return BadRequest(new { message = "Person count must be between 1 and 50." });
         if (string.IsNullOrWhiteSpace(request.PickupPlace) || string.IsNullOrWhiteSpace(request.Purpose))
             return BadRequest(new { message = "Pickup location and purpose are required." });
-        var customer = await db.Customers.FindAsync(request.CustomerId);
-        if (customer is null || customer.AssignedToId != User.UserId()) return BadRequest(new { message = "Select one of your customers." });
+        var lead = await db.Leads.FindAsync(request.LeadId);
+        if (lead is null || lead.AssignedToId != User.UserId())
+            return BadRequest(new { message = "Select one of your assigned pipeline leads." });
         if (!await db.Projects.AnyAsync(x => x.Id == request.ProjectId)) return BadRequest(new { message = "Project not found." });
         if (request.TimezoneOffsetMinutes is < -840 or > 840)
             return BadRequest(new { message = "Invalid timezone offset." });
@@ -76,7 +82,7 @@ public class VehicleBookingsController(CrmDbContext db) : ControllerBase
         var booking = new VehicleBooking
         {
             SalesExecutiveId = User.UserId(),
-            CustomerId = request.CustomerId,
+            LeadId = request.LeadId,
             ProjectId = request.ProjectId,
             VisitDate = request.VisitDate,
             VisitTime = request.VisitTime,
