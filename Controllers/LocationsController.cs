@@ -53,14 +53,33 @@ public class LocationsController(CrmDbContext db) : ControllerBase
     [Authorize(Roles = "SuperAdmin,Admin")]
     public async Task<ActionResult> Live()
     {
-        var latestIds = db.EmployeeLocations.GroupBy(x => x.UserId).Select(g => g.Max(x => x.Id));
-        var latest = await db.EmployeeLocations.Include(x => x.User).ThenInclude(x => x.Role)
-            .Where(x => latestIds.Contains(x.Id) && x.User.IsActive && x.User.Role.Name == "SalesExecutive")
-            .Select(x => new { employeeId = x.UserId, x.User.FullName, x.User.Phone, x.Latitude, x.Longitude,
-                x.AccuracyMeters, x.SpeedMetersPerSecond, x.IsMocked, x.RecordedAtUtc,
-                isOnline = x.RecordedAtUtc >= DateTime.UtcNow.AddMinutes(-5) })
-            .OrderByDescending(x => x.RecordedAtUtc).ToListAsync();
-        return Ok(latest);
+        var employees = await db.Users
+            .Where(x => x.IsActive && x.Role.Name == "SalesExecutive")
+            .Select(x => new { x.Id, x.FullName, x.Phone })
+            .OrderBy(x => x.FullName)
+            .ToListAsync();
+        var employeeIds = employees.Select(x => x.Id).ToList();
+        var latestIds = db.EmployeeLocations.Where(x => employeeIds.Contains(x.UserId))
+            .GroupBy(x => x.UserId).Select(g => g.Max(x => x.Id));
+        var locations = await db.EmployeeLocations.Where(x => latestIds.Contains(x.Id)).ToListAsync();
+        var byEmployee = locations.ToDictionary(x => x.UserId);
+        var now = DateTime.UtcNow;
+
+        return Ok(employees.Select(employee =>
+        {
+            byEmployee.TryGetValue(employee.Id, out var location);
+            return new
+            {
+                employeeId = employee.Id, employee.FullName, employee.Phone,
+                latitude = location?.Latitude, longitude = location?.Longitude,
+                accuracyMeters = location?.AccuracyMeters,
+                speedMetersPerSecond = location?.SpeedMetersPerSecond,
+                isMocked = location?.IsMocked ?? false,
+                recordedAtUtc = location?.RecordedAtUtc,
+                hasLocation = location is not null,
+                isOnline = location?.RecordedAtUtc >= now.AddMinutes(-5)
+            };
+        }));
     }
 
     [HttpGet("history/{employeeId:int}")]
