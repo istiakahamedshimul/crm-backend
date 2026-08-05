@@ -21,6 +21,7 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options) : DbContext(op
     public DbSet<Vehicle> Vehicles => Set<Vehicle>();
     public DbSet<LeadAutomationSettings> LeadAutomationSettings => Set<LeadAutomationSettings>();
     public DbSet<LeadReturn> LeadReturns => Set<LeadReturn>();
+    public DbSet<EmployeeLocation> EmployeeLocations => Set<EmployeeLocation>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -47,5 +48,7 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options) : DbContext(op
         modelBuilder.Entity<LeadAutomationSettings>().Property(x => x.ReminderIntervalHours).HasPrecision(10, 4);
         modelBuilder.Entity<LeadReturn>().HasOne(x => x.Lead).WithMany().HasForeignKey(x => x.LeadId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<LeadReturn>().HasOne(x => x.SalesExecutive).WithMany().HasForeignKey(x => x.SalesExecutiveId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<EmployeeLocation>().HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<EmployeeLocation>().HasIndex(x => new { x.UserId, x.RecordedAtUtc });
     }
 }
