@@ -14,6 +14,7 @@ namespace backend.Controllers;
 [Tags("Users")]
 public class UsersController(CrmDbContext db) : ControllerBase
 {
+    private static readonly string[] AdminAccountRoles = ["Admin", "CS", "CA", "VehicleDepartment"];
     [HttpGet]
     [Authorize(Roles = "SuperAdmin")]
     public async Task<ActionResult<List<UserSummaryDto>>> GetUsers()
@@ -41,8 +42,17 @@ public class UsersController(CrmDbContext db) : ControllerBase
     [Authorize(Roles = "SuperAdmin")]
     public async Task<ActionResult> CreateUser(CreateUserRequest request)
     {
+        if (!AdminAccountRoles.Contains(request.Role)) return BadRequest(new { message = "Admin accounts can only use Admin, CS, CA, or Vehicle Department roles." });
         return await CreateUserInternal(request.FullName, request.Email, request.Phone, request.Role, request.Password);
     }
+
+    [HttpGet("admin-accounts")]
+    [Authorize(Roles = "SuperAdmin")]
+    public async Task<ActionResult> GetAdminAccounts() => Ok(await db.Users.Include(x => x.Role)
+        .Where(x => AdminAccountRoles.Contains(x.Role.Name))
+        .OrderBy(x => x.Role.Name).ThenBy(x => x.FullName)
+        .Select(x => new { x.Id, x.FullName, x.Email, x.Phone, role = x.Role.Name, x.IsActive, x.CreatedAt, x.LastLoginAt, permissionIds = x.UserPermissions.Select(p => p.PermissionId) })
+        .ToListAsync());
 
     [HttpPost("sales-executives")]
     [Authorize(Roles = "SuperAdmin")]
@@ -145,7 +155,10 @@ public class UsersController(CrmDbContext db) : ControllerBase
     [Authorize(Roles = "SuperAdmin")]
     public async Task<ActionResult> UpdateUser(int id, UpdateAdminUserRequest request)
     {
+        if (!AdminAccountRoles.Contains(request.Role)) return BadRequest(new { message = "Admin accounts can only use Admin, CS, CA, or Vehicle Department roles." });
         var user = await db.Users.FindAsync(id); if (user is null) return NotFound();
+        var currentRole = await db.Roles.Where(x => x.Id == user.RoleId).Select(x => x.Name).SingleAsync();
+        if (!AdminAccountRoles.Contains(currentRole)) return BadRequest(new { message = "This account is managed in its dedicated user section." });
         var role = await db.Roles.FirstOrDefaultAsync(x => x.Name == request.Role && x.IsActive); if (role is null) return BadRequest(new { message = "Invalid role." });
         if (await db.Users.AnyAsync(x => x.Id != id && x.Email == request.Email.Trim())) return Conflict(new { message = "Email already exists." });
         user.FullName=request.FullName.Trim(); user.Email=request.Email.Trim(); user.Phone=request.Phone.Trim(); user.RoleId=role.Id; user.IsActive=request.IsActive;
