@@ -43,6 +43,21 @@ public static class SeedData
         Grant("Admin", PermissionCodes.LeadsManage, PermissionCodes.CustomersView, PermissionCodes.PaymentsView, PermissionCodes.PaymentsRecord, PermissionCodes.PaymentsApprove, PermissionCodes.AgreementsManage, PermissionCodes.EmiManage, PermissionCodes.TransportationManage, PermissionCodes.NotificationsManage, PermissionCodes.ReportsView);
         db.SaveChanges();
 
+        // Repair legacy Booked leads that predate automatic conversion. This is
+        // idempotent because Customers.LeadId is unique and existing links are skipped.
+        var convertedLeadIds = db.Customers.Where(x => x.LeadId.HasValue).Select(x => x.LeadId!.Value).ToHashSet();
+        foreach (var lead in db.Leads.Where(x => x.Status == LeadStatus.Booked && !convertedLeadIds.Contains(x.Id)))
+        {
+            db.Customers.Add(new Customer
+            {
+                LeadId = lead.Id, Name = lead.CustomerName, Phone = lead.Phone,
+                AlternativePhone = lead.AlternativePhone, Email = lead.Email, Address = lead.Address,
+                AssignedToId = lead.AssignedToId, ProjectId = lead.ProjectId, PaymentStatus = "Unpaid",
+                BookedAt = lead.CreatedAt, BookedById = lead.CreatedById
+            });
+        }
+        db.SaveChanges();
+
         var adminRole = db.Roles.First(x => x.Name == "SuperAdmin");
         var salesRole = db.Roles.First(x => x.Name == "SalesExecutive");
 
