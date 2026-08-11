@@ -14,38 +14,61 @@ public class DashboardController(CrmDbContext db, IFinancialService financial) :
     [HttpGet]
     public async Task<ActionResult> Get([FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null)
     {
+        var today = DateTime.UtcNow.Date;
+        var rangeFrom = (from ?? new DateTime(today.Year, today.Month, 1)).Date;
+        var rangeTo = (to ?? today).Date;
+        if (rangeFrom > rangeTo) return BadRequest(new { message = "Dashboard start date cannot be after the end date." });
+        var endExclusive = rangeTo.AddDays(1);
+
+        if (User.IsInRole("VehicleDepartment"))
+            return Ok(new
+            {
+                leads = await db.VehicleBookings.CountAsync(x => x.CreatedAt >= rangeFrom && x.CreatedAt < endExclusive),
+                customers = await db.VehicleBookings.CountAsync(x => x.Status == VehicleBookingStatus.Approved && x.VisitDate >= DateOnly.FromDateTime(rangeFrom) && x.VisitDate <= DateOnly.FromDateTime(rangeTo)),
+                projects = await db.Vehicles.CountAsync(x => x.IsActive),
+                collectionFrom = rangeFrom, collectionTo = rangeTo
+            });
+
         var customerIds = User.IsInRole("SalesExecutive")
             ? await db.Customers.Where(x => x.AssignedToId == User.UserId()).Select(x => x.Id).ToListAsync()
-            : await db.Customers.Select(x => x.Id).ToListAsync();
+            : await db.Customers.Where(x => x.CreatedAt >= rangeFrom && x.CreatedAt < endExclusive).Select(x => x.Id).ToListAsync();
         var summaries = new List<FinancialSummary>();
         foreach (var id in customerIds) summaries.Add(await financial.SummaryAsync(id));
         if (User.IsInRole("SalesExecutive"))
             return Ok(new { assignedCustomers = customerIds.Count, customersWithCurrentDues = summaries.Count(x => x.CurrentDue > 0), customersWithOverduePayments = summaries.Count(x => x.OverdueAmount > 0), totalOutstanding = summaries.Sum(x => x.OutstandingBalance), upcomingEmiReminders = summaries.Count(x => x.NextEmiDueDate.HasValue) });
 
-        var today = DateTime.UtcNow.Date;
-        var rangeFrom = (from ?? new DateTime(today.Year, today.Month, 1)).Date;
-        var rangeTo = (to ?? today).Date;
-        if (rangeFrom > rangeTo) return BadRequest(new { message = "Collection start date cannot be after the end date." });
-        var endExclusive = rangeTo.AddDays(1);
+        if (User.IsInRole("SubAdmin") || User.IsInRole("CS"))
+            return Ok(new
+            {
+                leads = User.IsInRole("SubAdmin") ? await db.Leads.CountAsync(x => x.CreatedAt >= rangeFrom && x.CreatedAt < endExclusive) : 0,
+                customers = customerIds.Count,
+                projects = User.IsInRole("CS") ? await db.FinancialAgreements.CountAsync(x => x.CreatedAt >= rangeFrom && x.CreatedAt < endExclusive) : 0,
+                collectionFrom = rangeFrom, collectionTo = rangeTo
+            });
+
         var approvedInRange = db.Payments.Where(x => x.Status == PaymentStatus.Approved && !x.IsReversed && x.PaymentDate >= rangeFrom && x.PaymentDate < endExclusive);
+        var pendingInRange = db.Payments.Where(x => x.Status == PaymentStatus.Pending && !x.IsReversed && x.PaymentDate >= rangeFrom && x.PaymentDate < endExclusive);
+        var commissionsInRange = db.Commissions.Where(x => x.Status != CommissionStatus.Rejected && x.CreatedAt >= rangeFrom && x.CreatedAt < endExclusive);
 
         return Ok(new
         {
-            leads = await db.Leads.CountAsync(),
+            leads = await db.Leads.CountAsync(x => x.CreatedAt >= rangeFrom && x.CreatedAt < endExclusive),
             customers = customerIds.Count,
             projects = await db.Projects.CountAsync(x => x.Status != ProjectStatus.Completed && x.Status != ProjectStatus.SoldOut && x.Status != ProjectStatus.Paused),
             totalCollectible = summaries.Sum(x => x.TotalAgreedAmount),
             totalCollected = summaries.Sum(x => x.TotalPaid),
             totalCollection = await approvedInRange.SumAsync(x => (decimal?)x.Amount) ?? 0,
             collectionCount = await approvedInRange.CountAsync(),
+            pendingCollection = await pendingInRange.SumAsync(x => (decimal?)x.Amount) ?? 0,
+            totalCommission = await commissionsInRange.SumAsync(x => (decimal?)x.Amount) ?? 0,
             collectionFrom = rangeFrom,
             collectionTo = rangeTo,
             totalOutstanding = summaries.Sum(x => x.OutstandingBalance),
             totalDue = summaries.Sum(x => x.CurrentDue),
             totalOverdue = summaries.Sum(x => x.OverdueAmount),
             customersWithOverdueInstallments = summaries.Count(x => x.OverdueAmount > 0),
-            pendingPayments = await db.Payments.CountAsync(x => x.Status == PaymentStatus.Pending),
-            approvedPayments = await db.Payments.CountAsync(x => x.Status == PaymentStatus.Approved && !x.IsReversed)
+            pendingPayments = await pendingInRange.CountAsync(),
+            approvedPayments = await approvedInRange.CountAsync()
         });
     }
 }

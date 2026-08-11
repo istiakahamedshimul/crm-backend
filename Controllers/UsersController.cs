@@ -14,7 +14,7 @@ namespace backend.Controllers;
 [Tags("Users")]
 public class UsersController(CrmDbContext db) : ControllerBase
 {
-    private static readonly string[] AdminAccountRoles = ["Admin", "CS", "CA", "VehicleDepartment"];
+    private static readonly string[] AdminAccountRoles = ["Admin", "SubAdmin", "CS", "CA", "VehicleDepartment"];
     [HttpGet]
     [Authorize(Roles = "SuperAdmin")]
     public async Task<ActionResult<List<UserSummaryDto>>> GetUsers()
@@ -42,7 +42,7 @@ public class UsersController(CrmDbContext db) : ControllerBase
     [Authorize(Roles = "SuperAdmin")]
     public async Task<ActionResult> CreateUser(CreateUserRequest request)
     {
-        if (!AdminAccountRoles.Contains(request.Role)) return BadRequest(new { message = "Admin accounts can only use Admin, CS, CA, or Vehicle Department roles." });
+        if (!AdminAccountRoles.Contains(request.Role)) return BadRequest(new { message = "Admin accounts can only use Admin, Sub Admin, CS, CA, or Vehicle Department roles." });
         return await CreateUserInternal(request.FullName, request.Email, request.Phone, request.Role, request.Password);
     }
 
@@ -155,7 +155,7 @@ public class UsersController(CrmDbContext db) : ControllerBase
     [Authorize(Roles = "SuperAdmin")]
     public async Task<ActionResult> UpdateUser(int id, UpdateAdminUserRequest request)
     {
-        if (!AdminAccountRoles.Contains(request.Role)) return BadRequest(new { message = "Admin accounts can only use Admin, CS, CA, or Vehicle Department roles." });
+        if (!AdminAccountRoles.Contains(request.Role)) return BadRequest(new { message = "Admin accounts can only use Admin, Sub Admin, CS, CA, or Vehicle Department roles." });
         var user = await db.Users.FindAsync(id); if (user is null) return NotFound();
         var currentRole = await db.Roles.Where(x => x.Id == user.RoleId).Select(x => x.Name).SingleAsync();
         if (!AdminAccountRoles.Contains(currentRole)) return BadRequest(new { message = "This account is managed in its dedicated user section." });

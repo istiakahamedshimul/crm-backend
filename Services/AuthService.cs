@@ -14,7 +14,8 @@ public class AuthService(CrmDbContext db, JwtOptions options) : IAuthService
 {
     public async Task<AuthResponse?> LoginAsync(string email, string password)
     {
-        var user = await db.Users.Include(x => x.Role)
+        var user = await db.Users.Include(x => x.Role).ThenInclude(x => x.RolePermissions).ThenInclude(x => x.Permission)
+            .Include(x => x.UserPermissions).ThenInclude(x => x.Permission)
             .FirstOrDefaultAsync(x => x.Email == email && x.IsActive);
 
         if (user is null || !PasswordHash.Verify(password, user.PasswordHash))
@@ -25,7 +26,9 @@ public class AuthService(CrmDbContext db, JwtOptions options) : IAuthService
         user.LastLoginAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
 
-        return new AuthResponse(CreateToken(user), user.Id, user.FullName, user.Email, user.Role.Name);
+        var permissions = user.Role.Name == "SuperAdmin" ? new[] { "*" } : user.Role.RolePermissions.Select(x => x.Permission.Code)
+            .Concat(user.UserPermissions.Select(x => x.Permission.Code)).Distinct().OrderBy(x => x).ToArray();
+        return new AuthResponse(CreateToken(user), user.Id, user.FullName, user.Email, user.Role.Name, permissions);
     }
 
     public string CreateToken(User user)
