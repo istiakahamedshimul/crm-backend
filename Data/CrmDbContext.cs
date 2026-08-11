@@ -27,6 +27,7 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options) : DbContext(op
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>(); public DbSet<UserPermission> UserPermissions => Set<UserPermission>();
     public DbSet<FinancialAgreement> FinancialAgreements => Set<FinancialAgreement>(); public DbSet<EmiInstallment> EmiInstallments => Set<EmiInstallment>();
     public DbSet<FinancialAuditLog> FinancialAuditLogs => Set<FinancialAuditLog>(); public DbSet<AuditLog> AuditLogs => Set<AuditLog>(); public DbSet<NotificationSettings> NotificationSettings => Set<NotificationSettings>();
+    public DbSet<DailyWorkReport> DailyWorkReports => Set<DailyWorkReport>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -64,5 +65,7 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options) : DbContext(op
         modelBuilder.Entity<EmiInstallment>().HasIndex(x => new { x.FinancialAgreementId, x.InstallmentNumber }).IsUnique(); modelBuilder.Entity<EmiInstallment>().Property(x => x.ExpectedAmount).HasPrecision(18, 2); modelBuilder.Entity<EmiInstallment>().Property(x => x.PaidAmount).HasPrecision(18, 2);
         modelBuilder.Entity<Payment>().Property(x => x.Amount).HasPrecision(18, 2); modelBuilder.Entity<Payment>().HasIndex(x => x.IdempotencyKey).IsUnique();
         modelBuilder.Entity<Customer>().HasIndex(x => x.FileId).IsUnique();
+        modelBuilder.Entity<DailyWorkReport>().HasIndex(x => new { x.SalesExecutiveId, x.WorkDate }).IsUnique();
+        modelBuilder.Entity<DailyWorkReport>().HasOne(x => x.SalesExecutive).WithMany().HasForeignKey(x => x.SalesExecutiveId).OnDelete(DeleteBehavior.Restrict);
     }
 }
