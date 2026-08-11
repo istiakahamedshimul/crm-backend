@@ -25,10 +25,13 @@ jobs:
         run: |
           set -e
 
-          PROJECT_FILE=$(find . -name "*.csproj" -not -path "*/obj/*" -not -path "*/bin/*" | head -n 1)
+          # This repository also contains an xUnit project. Deployment must
+          # always publish the web application, never whichever csproj find
+          # happens to return first on the runner.
+          PROJECT_FILE="./backend.csproj"
 
-          if [ -z "$PROJECT_FILE" ]; then
-            echo "No .csproj file found."
+          if [ ! -f "$PROJECT_FILE" ]; then
+            echo "Backend project was not found at $PROJECT_FILE."
             exit 1
           fi
 
