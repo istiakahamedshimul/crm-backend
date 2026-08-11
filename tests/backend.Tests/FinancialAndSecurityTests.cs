@@ -20,4 +20,6 @@ public class FinancialAndSecurityTests
  [Fact]public void OverpaymentDoesNotCreateNegativeBalance()=>Assert.Equal(0,FinancialRules.Outstanding(100,120));
  [Fact]public void PermissionAttributePassesCodeToRuntimeFilter(){var attribute=new RequirePermissionAttribute(PermissionCodes.CustomersView);Assert.Equal(PermissionCodes.CustomersView,attribute.Arguments![0]);}
  [Fact]public void SalesCustomerViewPermissionCodeRemainsBaseline()=>Assert.Equal("customers.view",PermissionCodes.CustomersView);
+ [Fact]public void CatchUpPaymentFillsOldestMonthThenNext(){var rows=new List<EmiInstallment>{new(){InstallmentNumber=1,ExpectedAmount=100},new(){InstallmentNumber=2,ExpectedAmount=100},new(){InstallmentNumber=3,ExpectedAmount=100}};FinancialRules.AllocateOldest(rows,200,DateTime.Today);Assert.Equal(100,rows[0].PaidAmount);Assert.Equal(100,rows[1].PaidAmount);Assert.Equal(0,rows[2].PaidAmount);}
+ [Fact]public void ShortPaymentStaysOnOldestMonth(){var rows=new List<EmiInstallment>{new(){InstallmentNumber=1,ExpectedAmount=100},new(){InstallmentNumber=2,ExpectedAmount=100}};FinancialRules.AllocateOldest(rows,40,DateTime.Today);Assert.Equal(40,rows[0].PaidAmount);Assert.Equal(0,rows[1].PaidAmount);}
 }

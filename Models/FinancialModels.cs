@@ -3,7 +3,7 @@ namespace backend.Models;
 public class FinancialAgreement
 {
     public int Id { get; set; } public int CustomerId { get; set; } public Customer Customer { get; set; } = null!;
-    public decimal TotalAgreedAmount { get; set; } public decimal BookingAmount { get; set; } public PaymentPlanType PaymentPlan { get; set; }
+    public decimal TotalAgreedAmount { get; set; } public decimal BookingAmount { get; set; } public decimal DownPaymentAmount { get; set; } public PaymentPlanType PaymentPlan { get; set; }
     public DateTime? EmiStartDate { get; set; } public decimal? MonthlyEmiAmount { get; set; } public int? InstallmentCount { get; set; }
     public string? Remarks { get; set; } public int CreatedById { get; set; } public User CreatedBy { get; set; } = null!;
     public int UpdatedById { get; set; } public User UpdatedBy { get; set; } = null!; public DateTime CreatedAt { get; set; } = DateTime.UtcNow; public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

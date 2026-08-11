@@ -34,7 +34,6 @@ public class PaymentsController(CrmDbContext db, IFinancialService financial) : 
             installment=await db.EmiInstallments.SingleOrDefaultAsync(x=>x.Id==request.InstallmentId&&x.FinancialAgreement.CustomerId==request.CustomerId);
             if(installment is null)return BadRequest(new{message="Installment does not belong to customer."});
             var remaining=installment.ExpectedAmount-installment.PaidAmount; if(remaining<=0)return Conflict(new{message="Selected EMI installment is already paid."});
-            if(request.Amount>remaining)return BadRequest(new{message=$"EMI payment cannot exceed the installment remaining amount ({remaining:0.00})."});
         }
         else if(request.InstallmentId.HasValue)return BadRequest(new{message="An installment can only be selected for an EMI payment."});
 
