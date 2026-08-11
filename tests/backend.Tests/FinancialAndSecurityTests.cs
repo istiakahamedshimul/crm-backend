@@ -19,4 +19,5 @@ public class FinancialAndSecurityTests
  [Fact]public void DuplicateNotificationEventKeysAreStable(){var a=$"EmiDue:customer:{1}:installment:{2}:due:{new DateTime(2026,1,1):yyyyMMdd}";var b=$"EmiDue:customer:{1}:installment:{2}:due:{new DateTime(2026,1,1):yyyyMMdd}";Assert.Equal(a,b);}
  [Fact]public void OverpaymentDoesNotCreateNegativeBalance()=>Assert.Equal(0,FinancialRules.Outstanding(100,120));
  [Fact]public void PermissionAttributePassesCodeToRuntimeFilter(){var attribute=new RequirePermissionAttribute(PermissionCodes.CustomersView);Assert.Equal(PermissionCodes.CustomersView,attribute.Arguments![0]);}
+ [Fact]public void SalesCustomerViewPermissionCodeRemainsBaseline()=>Assert.Equal("customers.view",PermissionCodes.CustomersView);
 }
