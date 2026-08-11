@@ -30,6 +30,9 @@ public sealed class PermissionFilter(CrmDbContext db, string code) : IAsyncAutho
         // This also keeps existing production Sales roles working if their
         // seeded role-permission row predates the permission migration.
         if (code == PermissionCodes.CustomersView && context.HttpContext.User.IsInRole("SalesExecutive")) return;
+        if (context.HttpContext.User.IsInRole("CA") && code is PermissionCodes.CustomersView or PermissionCodes.PaymentsView or PermissionCodes.PaymentsRecord or PermissionCodes.PaymentsApprove or PermissionCodes.PaymentsReverse or PermissionCodes.ReportsView) return;
+        if (context.HttpContext.User.IsInRole("CS") && code is PermissionCodes.CustomersView or PermissionCodes.AgreementsManage or PermissionCodes.EmiManage) return;
+        if (context.HttpContext.User.IsInRole("Admin") && code is not PermissionCodes.UsersManage and not PermissionCodes.RolesManage and not PermissionCodes.PermissionsManage) return;
         var userId = context.HttpContext.User.UserId();
         var allowed = await db.UserPermissions.AnyAsync(x => x.UserId == userId && x.Permission.Code == code) ||
                       await db.Users.Where(x => x.Id == userId).SelectMany(x => x.Role.RolePermissions).AnyAsync(x => x.Permission.Code == code);
