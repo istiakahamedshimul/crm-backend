@@ -13,5 +13,6 @@ public enum PaymentStatus { Pending, Approved, Rejected }
 public enum PaymentPlanType { FullPayment, Emi }
 public enum InstallmentStatus { Upcoming, Due, PartiallyPaid, Paid, Overdue }
 public enum FinancialAuditAction { AgreementCreated, AgreementUpdated, ScheduleGenerated, PaymentRecorded, PaymentApproved, PaymentReversed, PaymentRejected }
+public enum PaymentPurpose { BookingAmount, DownPayment, EmiInstallment, FullPayment, Other }
 public enum CommissionStatus { Pending, Approved, Rejected, Paid, Hold }
 public enum VehicleBookingStatus { Pending, Approved, Rejected, Cancelled }

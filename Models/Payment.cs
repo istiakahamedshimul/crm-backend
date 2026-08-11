@@ -12,6 +12,7 @@ public class Payment
     public User SalesExecutive { get; set; } = null!;
     public decimal Amount { get; set; }
     public PaymentMethod Method { get; set; }
+    public PaymentPurpose? Purpose { get; set; }
     public string? ProofUrl { get; set; }
     public string? Remarks { get; set; }
     public PaymentStatus Status { get; set; } = PaymentStatus.Pending;
