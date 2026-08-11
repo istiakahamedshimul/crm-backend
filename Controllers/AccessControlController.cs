@@ -5,7 +5,8 @@ public class AccessControlController(CrmDbContext db) : ControllerBase
 {
     [HttpGet] public async Task<ActionResult> Get() => Ok(new {
         roles = await db.Roles.Select(x => new { x.Id, x.Name, x.Department, x.IsActive, permissionIds = x.RolePermissions.Select(p => p.PermissionId) }).ToListAsync(),
-        groups = await db.PermissionGroups.Select(x => new { x.Id, x.Name, x.Description, permissions = x.Permissions.Select(p => new { p.Id, p.Code, p.Name }) }).ToListAsync()
+        groups = await db.PermissionGroups.Select(x => new { x.Id, x.Name, x.Description, permissions = x.Permissions.Select(p => new { p.Id, p.Code, p.Name }) }).ToListAsync(),
+        users = await db.Users.Select(x => new { x.Id, x.FullName, x.Email, x.Phone, x.IsActive, x.RoleId, roleName = x.Role.Name, permissionIds = x.UserPermissions.Select(p => p.PermissionId) }).ToListAsync()
     });
     [HttpPost("groups")] public async Task<ActionResult> Group(GroupRequest r) { if (string.IsNullOrWhiteSpace(r.Name)) return BadRequest(); var x = new PermissionGroup{Name=r.Name.Trim(),Description=r.Description}; db.Add(x); await db.SaveChangesAsync(); return Ok(x); }
     [HttpPost("permissions")] public async Task<ActionResult> Permission(PermissionRequest r) { if (await db.Permissions.AnyAsync(x=>x.Code==r.Code)) return Conflict(new {message="Permission code exists."}); var x=new Permission{Code=r.Code.Trim(),Name=r.Name.Trim(),PermissionGroupId=r.GroupId};db.Add(x);await db.SaveChangesAsync();return Ok(x);}

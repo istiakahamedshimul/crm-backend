@@ -34,7 +34,7 @@ public class LeadsController(
     }
 
     [HttpPost("import")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [Authorize(Roles = "SuperAdmin,Admin,SubAdmin")]
     [RequestSizeLimit(10_000_000)]
     public async Task<ActionResult> Import(IFormFile file, [FromForm] bool autoAssign = false)
     {
@@ -147,7 +147,7 @@ public class LeadsController(
     }
 
     [HttpGet("returned")]
-    [Authorize(Roles = "SuperAdmin,Admin,Manager")]
+    [Authorize(Roles = "SuperAdmin,Admin,SubAdmin,Manager")]
     public async Task<ActionResult> GetReturnedLeads()
     {
         var history = await db.LeadReturns
@@ -172,7 +172,7 @@ public class LeadsController(
     }
 
     [HttpPost]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [Authorize(Roles = "SuperAdmin,Admin,SubAdmin")]
     public async Task<ActionResult> CreateLead(CreateLeadRequest request)
     {
         if (!request.AssignedToId.HasValue)
@@ -251,7 +251,7 @@ public class LeadsController(
         if (User.IsInRole("SalesExecutive") && lead.AssignedToId != User.UserId()) return Forbid();
         var previousAssignedToId = lead.AssignedToId;
         var previousStatus = lead.Status;
-        if ((User.IsInRole("SuperAdmin") || User.IsInRole("Admin")) &&
+        if ((User.IsInRole("SuperAdmin") || User.IsInRole("Admin") || User.IsInRole("SubAdmin")) &&
             request.CustomerName is not null && request.Phone is not null)
         {
             if (string.IsNullOrWhiteSpace(request.CustomerName) || string.IsNullOrWhiteSpace(request.Phone))
@@ -272,7 +272,7 @@ public class LeadsController(
         }
         if (request.AssignedToId.HasValue)
         {
-            if (!User.IsInRole("SuperAdmin") && !User.IsInRole("Admin"))
+            if (!User.IsInRole("SuperAdmin") && !User.IsInRole("Admin") && !User.IsInRole("SubAdmin"))
             {
                 return Forbid();
             }
