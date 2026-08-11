@@ -8,7 +8,7 @@ using backend.Models;
 namespace backend.Controllers;
 
 [ApiController]
-[Authorize(Roles = "SuperAdmin,Admin,Manager,Accountant,CA")]
+[Authorize(Roles = "SuperAdmin,Admin,SubAdmin,Manager,Accountant,CA")]
 [Route("api/reports")]
 [Tags("Reports")]
 public class ReportsController(CrmDbContext db, IFinancialService financial) : ControllerBase

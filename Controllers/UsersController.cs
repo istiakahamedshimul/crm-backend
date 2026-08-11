@@ -26,7 +26,7 @@ public class UsersController(CrmDbContext db) : ControllerBase
     }
 
     [HttpGet("/api/sales-executives")]
-    [Authorize(Roles = "SuperAdmin,Admin,Manager,CS,CA,VehicleDepartment")]
+    [Authorize(Roles = "SuperAdmin,Admin,SubAdmin,Manager,CS,CA,VehicleDepartment")]
     public async Task<ActionResult> GetSalesExecutives()
     {
         var users = await db.Users.Include(x => x.Role)

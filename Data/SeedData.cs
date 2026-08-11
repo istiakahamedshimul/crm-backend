@@ -7,7 +7,7 @@ public static class SeedData
 {
     public static void EnsureSeeded(CrmDbContext db)
     {
-        var roleNames = new[] { "SuperAdmin", "Admin", "Manager", "SalesExecutive", "Accountant", "Customer", "CS", "CA", "VehicleDepartment" };
+        var roleNames = new[] { "SuperAdmin", "Admin", "SubAdmin", "Manager", "SalesExecutive", "Accountant", "Customer", "CS", "CA", "VehicleDepartment" };
         foreach (var roleName in roleNames)
         {
             if (!db.Roles.Any(x => x.Name == roleName))
@@ -39,6 +39,7 @@ public static class SeedData
         Grant("CS", PermissionCodes.CustomersView, PermissionCodes.AgreementsManage, PermissionCodes.EmiManage);
         Grant("CA", PermissionCodes.CustomersView, PermissionCodes.PaymentsView, PermissionCodes.PaymentsRecord, PermissionCodes.PaymentsApprove, PermissionCodes.PaymentsReverse, PermissionCodes.ReportsView);
         Grant("VehicleDepartment", PermissionCodes.TransportationManage);
+        Grant("SubAdmin", PermissionCodes.LeadsManage, PermissionCodes.BookingsManage, PermissionCodes.CustomersView, PermissionCodes.NotificationsManage, PermissionCodes.ReportsView);
         Grant("SalesExecutive", PermissionCodes.CustomersView);
         Grant("Admin", PermissionCodes.LeadsManage, PermissionCodes.CustomersView, PermissionCodes.PaymentsView, PermissionCodes.PaymentsRecord, PermissionCodes.PaymentsApprove, PermissionCodes.AgreementsManage, PermissionCodes.EmiManage, PermissionCodes.TransportationManage, PermissionCodes.NotificationsManage, PermissionCodes.ReportsView);
         db.SaveChanges();
@@ -60,6 +61,9 @@ public static class SeedData
 
         var adminRole = db.Roles.First(x => x.Name == "SuperAdmin");
         var salesRole = db.Roles.First(x => x.Name == "SalesExecutive");
+        var vehicleRole = db.Roles.First(x => x.Name == "VehicleDepartment");
+        var csRole = db.Roles.First(x => x.Name == "CS");
+        var subAdminRole = db.Roles.First(x => x.Name == "SubAdmin");
 
         if (!db.Users.Any(x => x.Email == "admin@crm.local"))
         {
@@ -82,6 +86,27 @@ public static class SeedData
                 Phone = "01800000000",
                 RoleId = salesRole.Id,
                 PasswordHash = PasswordHash.Create("Sales@12345")
+            });
+        }
+
+        var demoPassword = Environment.GetEnvironmentVariable("CRM_DEMO_ACCOUNT_PASSWORD");
+        if (!string.IsNullOrWhiteSpace(demoPassword))
+        {
+            AddDemoUser("Demo Vehicle Officer", "vehicle.demo@crm.local", "01900000001", vehicleRole, demoPassword);
+            AddDemoUser("Demo CS Officer", "cs.demo@crm.local", "01900000002", csRole, demoPassword);
+            AddDemoUser("Demo Sub Admin", "subadmin.demo@crm.local", "01900000003", subAdminRole, demoPassword);
+        }
+
+        void AddDemoUser(string fullName, string email, string phone, Role role, string password)
+        {
+            if (db.Users.Any(x => x.Email == email)) return;
+            db.Users.Add(new User
+            {
+                FullName = fullName,
+                Email = email,
+                Phone = phone,
+                RoleId = role.Id,
+                PasswordHash = PasswordHash.Create(password)
             });
         }
 
