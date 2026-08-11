@@ -110,7 +110,7 @@ app.UseAuthentication();
 app.Use(async (context, next) =>
 {
     if (context.User.IsInRole("VehicleDepartment") && context.Request.Path.StartsWithSegments("/api") &&
-        !context.Request.Path.StartsWithSegments("/api/vehicle") && !context.Request.Path.StartsWithSegments("/api/auth") &&
+        !context.Request.Path.StartsWithSegments("/api/vehicles") && !context.Request.Path.StartsWithSegments("/api/vehicle-bookings") && !context.Request.Path.StartsWithSegments("/api/auth") &&
         !context.Request.Path.StartsWithSegments("/api/me") && !context.Request.Path.StartsWithSegments("/api/dashboard"))
     { context.Response.StatusCode = StatusCodes.Status403Forbidden; return; }
     await next();
