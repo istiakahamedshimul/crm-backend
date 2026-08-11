@@ -23,4 +23,14 @@ public class Payment
     public string? RejectReason { get; set; }
     public string? GatewayTransactionId { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime PaymentDate { get; set; } = DateTime.UtcNow;
+    public string? TransactionReference { get; set; }
+    public int? InstallmentId { get; set; }
+    public EmiInstallment? Installment { get; set; }
+    public bool IsReversed { get; set; }
+    public DateTime? ReversedAt { get; set; }
+    public int? ReversedById { get; set; }
+    public User? ReversedBy { get; set; }
+    public string? ReversalReason { get; set; }
+    public string? IdempotencyKey { get; set; }
 }

@@ -7,7 +7,7 @@ public static class SeedData
 {
     public static void EnsureSeeded(CrmDbContext db)
     {
-        var roleNames = new[] { "SuperAdmin", "Admin", "Manager", "SalesExecutive", "Accountant", "Customer" };
+        var roleNames = new[] { "SuperAdmin", "Admin", "Manager", "SalesExecutive", "Accountant", "Customer", "CS", "CA", "VehicleDepartment" };
         foreach (var roleName in roleNames)
         {
             if (!db.Roles.Any(x => x.Name == roleName))
@@ -16,6 +16,31 @@ public static class SeedData
             }
         }
 
+        db.SaveChanges();
+
+        var definitions = new Dictionary<string, string[]>
+        {
+            ["User Management"] = [PermissionCodes.UsersManage], ["Role Management"] = [PermissionCodes.RolesManage], ["Permission Management"] = [PermissionCodes.PermissionsManage],
+            ["Lead Management"] = [PermissionCodes.LeadsManage], ["Booking Management"] = [PermissionCodes.BookingsManage], ["Customer Management"] = [PermissionCodes.CustomersView], ["Payment Management"] = [PermissionCodes.PaymentsView, PermissionCodes.PaymentsRecord, PermissionCodes.PaymentsApprove, PermissionCodes.PaymentsReverse],
+            ["EMI Management"] = [PermissionCodes.AgreementsManage, PermissionCodes.EmiManage], ["Transportation Management"] = [PermissionCodes.TransportationManage], ["Notification Management"] = [PermissionCodes.NotificationsManage], ["Reports"] = [PermissionCodes.ReportsView]
+        };
+        foreach (var definition in definitions)
+        {
+            var group = db.PermissionGroups.FirstOrDefault(x => x.Name == definition.Key) ?? new PermissionGroup { Name = definition.Key };
+            if (group.Id == 0) db.PermissionGroups.Add(group);
+            foreach (var code in definition.Value)
+                if (!db.Permissions.Any(x => x.Code == code)) db.Permissions.Add(new Permission { Code = code, Name = code.Replace('.', ' '), PermissionGroup = group });
+        }
+        db.SaveChanges();
+        void Grant(string roleName, params string[] codes) {
+            var role = db.Roles.First(x => x.Name == roleName); foreach (var permission in db.Permissions.Where(x => codes.Contains(x.Code)))
+                if (!db.RolePermissions.Any(x => x.RoleId == role.Id && x.PermissionId == permission.Id)) db.RolePermissions.Add(new RolePermission { RoleId = role.Id, PermissionId = permission.Id });
+        }
+        Grant("CS", PermissionCodes.CustomersView, PermissionCodes.AgreementsManage, PermissionCodes.EmiManage);
+        Grant("CA", PermissionCodes.CustomersView, PermissionCodes.PaymentsView, PermissionCodes.PaymentsRecord, PermissionCodes.PaymentsApprove, PermissionCodes.PaymentsReverse, PermissionCodes.ReportsView);
+        Grant("VehicleDepartment", PermissionCodes.TransportationManage);
+        Grant("SalesExecutive", PermissionCodes.CustomersView);
+        Grant("Admin", PermissionCodes.LeadsManage, PermissionCodes.CustomersView, PermissionCodes.PaymentsView, PermissionCodes.PaymentsRecord, PermissionCodes.PaymentsApprove, PermissionCodes.AgreementsManage, PermissionCodes.EmiManage, PermissionCodes.TransportationManage, PermissionCodes.NotificationsManage, PermissionCodes.ReportsView);
         db.SaveChanges();
 
         var adminRole = db.Roles.First(x => x.Name == "SuperAdmin");

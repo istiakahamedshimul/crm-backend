@@ -65,8 +65,10 @@ var jwtOptions = builder.Configuration.GetSection("Jwt").Get<JwtOptions>() ?? ne
 builder.Services.AddSingleton(jwtOptions);
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
+builder.Services.AddScoped<IFinancialService, FinancialService>();
 builder.Services.AddScoped<ILeadAssignmentService, LeadAssignmentService>();
 builder.Services.AddHostedService<LeadAutomationWorker>();
+builder.Services.AddHostedService<EmiDueWorker>();
 builder.Services.Configure<OneSignalOptions>(builder.Configuration.GetSection("OneSignal"));
 builder.Services.AddHttpClient<IOneSignalNotificationService, OneSignalNotificationService>(client =>
 {
@@ -105,6 +107,14 @@ app.UseSwaggerUI(options =>
 app.UseCors("crm");
 app.UseStaticFiles();
 app.UseAuthentication();
+app.Use(async (context, next) =>
+{
+    if (context.User.IsInRole("VehicleDepartment") && context.Request.Path.StartsWithSegments("/api") &&
+        !context.Request.Path.StartsWithSegments("/api/vehicle") && !context.Request.Path.StartsWithSegments("/api/auth") &&
+        !context.Request.Path.StartsWithSegments("/api/me"))
+    { context.Response.StatusCode = StatusCodes.Status403Forbidden; return; }
+    await next();
+});
 app.UseAuthorization();
 app.MapControllers();
 
