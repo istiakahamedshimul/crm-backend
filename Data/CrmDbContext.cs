@@ -22,6 +22,11 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options) : DbContext(op
     public DbSet<LeadAutomationSettings> LeadAutomationSettings => Set<LeadAutomationSettings>();
     public DbSet<LeadReturn> LeadReturns => Set<LeadReturn>();
     public DbSet<EmployeeLocation> EmployeeLocations => Set<EmployeeLocation>();
+    public DbSet<AppNotification> AppNotifications => Set<AppNotification>();
+    public DbSet<PermissionGroup> PermissionGroups => Set<PermissionGroup>(); public DbSet<Permission> Permissions => Set<Permission>();
+    public DbSet<RolePermission> RolePermissions => Set<RolePermission>(); public DbSet<UserPermission> UserPermissions => Set<UserPermission>();
+    public DbSet<FinancialAgreement> FinancialAgreements => Set<FinancialAgreement>(); public DbSet<EmiInstallment> EmiInstallments => Set<EmiInstallment>();
+    public DbSet<FinancialAuditLog> FinancialAuditLogs => Set<FinancialAuditLog>(); public DbSet<AuditLog> AuditLogs => Set<AuditLog>(); public DbSet<NotificationSettings> NotificationSettings => Set<NotificationSettings>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -50,5 +55,14 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options) : DbContext(op
         modelBuilder.Entity<LeadReturn>().HasOne(x => x.SalesExecutive).WithMany().HasForeignKey(x => x.SalesExecutiveId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<EmployeeLocation>().HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<EmployeeLocation>().HasIndex(x => new { x.UserId, x.RecordedAtUtc });
+        modelBuilder.Entity<AppNotification>().HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<AppNotification>().HasIndex(x => new { x.UserId, x.EventKey }).IsUnique();
+        modelBuilder.Entity<AppNotification>().HasIndex(x => new { x.UserId, x.IsRead, x.CreatedAt });
+        modelBuilder.Entity<PermissionGroup>().HasIndex(x => x.Name).IsUnique(); modelBuilder.Entity<Permission>().HasIndex(x => x.Code).IsUnique();
+        modelBuilder.Entity<RolePermission>().HasKey(x => new { x.RoleId, x.PermissionId }); modelBuilder.Entity<UserPermission>().HasKey(x => new { x.UserId, x.PermissionId });
+        modelBuilder.Entity<FinancialAgreement>().HasIndex(x => x.CustomerId).IsUnique(); modelBuilder.Entity<FinancialAgreement>().Property(x => x.TotalAgreedAmount).HasPrecision(18, 2); modelBuilder.Entity<FinancialAgreement>().Property(x => x.BookingAmount).HasPrecision(18, 2); modelBuilder.Entity<FinancialAgreement>().Property(x => x.MonthlyEmiAmount).HasPrecision(18, 2);
+        modelBuilder.Entity<EmiInstallment>().HasIndex(x => new { x.FinancialAgreementId, x.InstallmentNumber }).IsUnique(); modelBuilder.Entity<EmiInstallment>().Property(x => x.ExpectedAmount).HasPrecision(18, 2); modelBuilder.Entity<EmiInstallment>().Property(x => x.PaidAmount).HasPrecision(18, 2);
+        modelBuilder.Entity<Payment>().Property(x => x.Amount).HasPrecision(18, 2); modelBuilder.Entity<Payment>().HasIndex(x => x.IdempotencyKey).IsUnique();
+        modelBuilder.Entity<Customer>().HasIndex(x => x.FileId).IsUnique();
     }
 }

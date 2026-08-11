@@ -21,4 +21,9 @@ public class Customer
     public string PaymentStatus { get; set; } = "Unpaid";
     public string DocumentStatus { get; set; } = "Pending";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public string? FileId { get; set; }
+    public DateTime? BookedAt { get; set; }
+    public int? BookedById { get; set; }
+    public User? BookedBy { get; set; }
+    public FinancialAgreement? FinancialAgreement { get; set; }
 }

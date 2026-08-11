@@ -250,6 +250,7 @@ public class LeadsController(
         if (lead is null) return NotFound();
         if (User.IsInRole("SalesExecutive") && lead.AssignedToId != User.UserId()) return Forbid();
         var previousAssignedToId = lead.AssignedToId;
+        var previousStatus = lead.Status;
         if ((User.IsInRole("SuperAdmin") || User.IsInRole("Admin")) &&
             request.CustomerName is not null && request.Phone is not null)
         {
@@ -313,8 +314,9 @@ public class LeadsController(
                 LeadId = lead.Id, Name = lead.CustomerName, Phone = lead.Phone,
                 AlternativePhone = lead.AlternativePhone, Email = lead.Email, Address = lead.Address,
                 AssignedToId = lead.AssignedToId, ProjectId = lead.ProjectId,
-                PaymentStatus = "Positive"
+                PaymentStatus = "Unpaid", BookedAt = DateTime.UtcNow, BookedById = User.UserId()
             });
+            db.AuditLogs.Add(new AuditLog { EntityType = "Lead", EntityId = lead.Id.ToString(), Action = "StatusChangedToBooked", DetailsJson = $"{{\"previousStatus\":\"{previousStatus}\",\"newStatus\":\"Booked\"}}", PerformedById = User.UserId() });
         }
         else if (bookedCustomer is not null)
         {

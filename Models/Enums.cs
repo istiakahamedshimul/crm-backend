@@ -10,5 +10,8 @@ public enum ProjectStatus { Upcoming, Ongoing, Ready, Completed, SoldOut, Paused
 public enum InvoiceStatus { Draft, Generated, SentToCustomer, PartiallyPaid, Paid, Cancelled, Expired }
 public enum PaymentMethod { Cash, BankTransfer, Cheque, MobileBanking, CardMachine, OnlineGateway, Other }
 public enum PaymentStatus { Pending, Approved, Rejected }
+public enum PaymentPlanType { FullPayment, Emi }
+public enum InstallmentStatus { Upcoming, Due, PartiallyPaid, Paid, Overdue }
+public enum FinancialAuditAction { AgreementCreated, AgreementUpdated, ScheduleGenerated, PaymentRecorded, PaymentApproved, PaymentReversed, PaymentRejected }
 public enum CommissionStatus { Pending, Approved, Rejected, Paid, Hold }
 public enum VehicleBookingStatus { Pending, Approved, Rejected, Cancelled }

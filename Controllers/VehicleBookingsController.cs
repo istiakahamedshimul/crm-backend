@@ -100,7 +100,7 @@ public class VehicleBookingsController(CrmDbContext db) : ControllerBase
     }
 
     [HttpPost("admin")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [Authorize(Roles = "SuperAdmin,Admin,VehicleDepartment")]
     public async Task<ActionResult> CreateAdmin(CreateAdminVehicleBookingRequest request)
     {
         var customer = await db.Customers.FindAsync(request.CustomerId);
@@ -120,12 +120,12 @@ public class VehicleBookingsController(CrmDbContext db) : ControllerBase
     }
 
     [HttpPost("{id:int}/approve")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [Authorize(Roles = "SuperAdmin,Admin,VehicleDepartment")]
     public Task<ActionResult> Approve(int id, ReviewVehicleBookingRequest request) =>
         Review(id, VehicleBookingStatus.Approved, request);
 
     [HttpPost("{id:int}/reject")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [Authorize(Roles = "SuperAdmin,Admin,VehicleDepartment")]
     public Task<ActionResult> Reject(int id, ReviewVehicleBookingRequest request) =>
         Review(id, VehicleBookingStatus.Rejected, request);
 
