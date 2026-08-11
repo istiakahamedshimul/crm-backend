@@ -3,6 +3,7 @@ using backend.Extensions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.EntityFrameworkCore;
+using backend.Models;
 
 namespace backend.Security;
 
@@ -24,6 +25,11 @@ public sealed class PermissionFilter(CrmDbContext db, string code) : IAsyncAutho
     {
         if (!(context.HttpContext.User.Identity?.IsAuthenticated ?? false)) { context.Result = new UnauthorizedResult(); return; }
         if (context.HttpContext.User.IsInRole("SuperAdmin")) return;
+        // Sales customer access is a mandatory baseline capability. Individual
+        // customer queries still enforce AssignedToId ownership in controllers.
+        // This also keeps existing production Sales roles working if their
+        // seeded role-permission row predates the permission migration.
+        if (code == PermissionCodes.CustomersView && context.HttpContext.User.IsInRole("SalesExecutive")) return;
         var userId = context.HttpContext.User.UserId();
         var allowed = await db.UserPermissions.AnyAsync(x => x.UserId == userId && x.Permission.Code == code) ||
                       await db.Users.Where(x => x.Id == userId).SelectMany(x => x.Role.RolePermissions).AnyAsync(x => x.Permission.Code == code);
