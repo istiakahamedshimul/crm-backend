@@ -7,10 +7,15 @@ using Microsoft.EntityFrameworkCore;
 namespace backend.Security;
 
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = true)]
-public sealed class RequirePermissionAttribute(string code) : TypeFilterAttribute(typeof(PermissionFilter))
+public sealed class RequirePermissionAttribute : TypeFilterAttribute
 {
-    public string Code { get; } = code;
-    public RequirePermissionAttribute(string code, bool marker = true) : this(code) { Arguments = [code]; }
+    public string Code { get; }
+
+    public RequirePermissionAttribute(string code) : base(typeof(PermissionFilter))
+    {
+        Code = code;
+        Arguments = [code];
+    }
 }
 
 public sealed class PermissionFilter(CrmDbContext db, string code) : IAsyncAuthorizationFilter
