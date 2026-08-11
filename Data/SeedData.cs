@@ -36,7 +36,7 @@ public static class SeedData
             var role = db.Roles.First(x => x.Name == roleName); foreach (var permission in db.Permissions.Where(x => codes.Contains(x.Code)))
                 if (!db.RolePermissions.Any(x => x.RoleId == role.Id && x.PermissionId == permission.Id)) db.RolePermissions.Add(new RolePermission { RoleId = role.Id, PermissionId = permission.Id });
         }
-        Grant("CS", PermissionCodes.CustomersView, PermissionCodes.AgreementsManage, PermissionCodes.EmiManage);
+        Grant("CS", PermissionCodes.CustomersView, PermissionCodes.AgreementsManage, PermissionCodes.EmiManage, PermissionCodes.NotificationsManage);
         Grant("CA", PermissionCodes.CustomersView, PermissionCodes.PaymentsView, PermissionCodes.PaymentsRecord, PermissionCodes.PaymentsApprove, PermissionCodes.PaymentsReverse, PermissionCodes.ReportsView);
         Grant("VehicleDepartment", PermissionCodes.TransportationManage);
         Grant("SubAdmin", PermissionCodes.LeadsManage, PermissionCodes.BookingsManage, PermissionCodes.CustomersView, PermissionCodes.NotificationsManage, PermissionCodes.ReportsView);
