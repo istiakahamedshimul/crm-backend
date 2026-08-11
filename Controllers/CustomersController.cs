@@ -13,6 +13,7 @@ namespace backend.Controllers;
 [Authorize]
 [Route("api/customers")]
 [Tags("Customers")]
+[backend.Security.RequirePermission(PermissionCodes.CustomersView)]
 public class CustomersController(CrmDbContext db, ILeadAssignmentService assignmentService) : ControllerBase
 {
     [HttpGet]
@@ -29,6 +30,8 @@ public class CustomersController(CrmDbContext db, ILeadAssignmentService assignm
             x.Phone,
             x.Email,
             x.PaymentStatus,
+            x.FileId,
+            x.BookedAt,
             x.ProjectId,
             Project = x.Project == null ? null : x.Project.Name,
             ProjectType = x.Project == null ? (ProjectType?)null : x.Project.Type,
@@ -52,7 +55,7 @@ public class CustomersController(CrmDbContext db, ILeadAssignmentService assignm
         return Ok(await query.OrderBy(x => x.Name)
             .Select(x => new
             {
-                x.Id, x.LeadId, x.Name, x.Phone, x.Email, x.ProjectId, x.PaymentStatus,
+                x.Id, x.LeadId, x.Name, x.Phone, x.Email, x.ProjectId, x.PaymentStatus, x.FileId, x.BookedAt,
                 Project = x.Project == null ? null : x.Project.Name,
                 ProjectType = x.Project == null ? (ProjectType?)null : x.Project.Type,
                 SubGroupId = x.Project == null ? (int?)null : x.Project.SubGroupId,
@@ -78,7 +81,7 @@ public class CustomersController(CrmDbContext db, ILeadAssignmentService assignm
     }
 
     [HttpPut("{id:int}/project")]
-    [Authorize(Roles = "SuperAdmin,Admin,SalesExecutive")]
+    [Authorize(Roles = "SuperAdmin,Admin")]
     public async Task<ActionResult> UpdateProject(int id, UpdateCustomerProjectRequest request)
     {
         var customer = await db.Customers.FindAsync(id);
@@ -90,6 +93,16 @@ public class CustomersController(CrmDbContext db, ILeadAssignmentService assignm
         await db.SaveChangesAsync();
         return NoContent();
     }
+
+    [HttpPut("{id:int}/file-id")]
+    [backend.Security.RequirePermission(PermissionCodes.PaymentsRecord)]
+    public async Task<ActionResult> SetFileId(int id, SetFileIdRequest request)
+    {
+        if(string.IsNullOrWhiteSpace(request.FileId))return BadRequest(new{message="File ID is required."});
+        if(await db.Customers.AnyAsync(x=>x.Id!=id&&x.FileId==request.FileId.Trim()))return Conflict(new{message="File ID already exists."});
+        var customer=await db.Customers.FindAsync(id);if(customer is null)return NotFound();customer.FileId=request.FileId.Trim();await db.SaveChangesAsync();return NoContent();
+    }
+    public record SetFileIdRequest(string FileId);
 
     [HttpPost]
     [Authorize(Roles = "SuperAdmin,Admin")]

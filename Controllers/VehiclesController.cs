@@ -13,7 +13,7 @@ public class VehiclesController(CrmDbContext db) : ControllerBase
     [HttpGet]
     public async Task<ActionResult> Get() => Ok(await db.Vehicles.OrderBy(x => x.RegistrationNumber).ToListAsync());
 
-    [HttpPost, Authorize(Roles = "SuperAdmin,Admin")]
+    [HttpPost, Authorize(Roles = "SuperAdmin,Admin,VehicleDepartment")]
     public async Task<ActionResult> Create(SaveVehicleRequest request)
     {
         var error = Validate(request); if (error != null) return BadRequest(new { message = error });
@@ -22,7 +22,7 @@ public class VehiclesController(CrmDbContext db) : ControllerBase
         return Created($"/api/vehicles/{vehicle.Id}", vehicle);
     }
 
-    [HttpPut("{id:int}"), Authorize(Roles = "SuperAdmin,Admin")]
+    [HttpPut("{id:int}"), Authorize(Roles = "SuperAdmin,Admin,VehicleDepartment")]
     public async Task<ActionResult> Update(int id, SaveVehicleRequest request)
     {
         var vehicle = await db.Vehicles.FindAsync(id); if (vehicle == null) return NotFound();
@@ -32,7 +32,7 @@ public class VehiclesController(CrmDbContext db) : ControllerBase
         return Ok(vehicle);
     }
 
-    [HttpPatch("{id:int}/status"), Authorize(Roles = "SuperAdmin,Admin")]
+    [HttpPatch("{id:int}/status"), Authorize(Roles = "SuperAdmin,Admin,VehicleDepartment")]
     public async Task<ActionResult> Status(int id, [FromBody] bool isActive)
     { var vehicle = await db.Vehicles.FindAsync(id); if (vehicle == null) return NotFound(); vehicle.IsActive = isActive; await db.SaveChangesAsync(); return NoContent(); }
 

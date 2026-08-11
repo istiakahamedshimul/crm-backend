@@ -9,12 +9,13 @@ using Microsoft.EntityFrameworkCore;
 namespace backend.Controllers;
 
 [ApiController]
-[Authorize(Roles = "SuperAdmin,Admin,Manager")]
+[Authorize]
 [Route("api/users")]
 [Tags("Users")]
 public class UsersController(CrmDbContext db) : ControllerBase
 {
     [HttpGet]
+    [Authorize(Roles = "SuperAdmin")]
     public async Task<ActionResult<List<UserSummaryDto>>> GetUsers()
     {
         var users = await db.Users.Include(x => x.Role)
@@ -25,6 +26,7 @@ public class UsersController(CrmDbContext db) : ControllerBase
     }
 
     [HttpGet("/api/sales-executives")]
+    [Authorize(Roles = "SuperAdmin,Admin,Manager,CS,CA,VehicleDepartment")]
     public async Task<ActionResult> GetSalesExecutives()
     {
         var users = await db.Users.Include(x => x.Role)
@@ -36,20 +38,21 @@ public class UsersController(CrmDbContext db) : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [Authorize(Roles = "SuperAdmin")]
     public async Task<ActionResult> CreateUser(CreateUserRequest request)
     {
         return await CreateUserInternal(request.FullName, request.Email, request.Phone, request.Role, request.Password);
     }
 
     [HttpPost("sales-executives")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [Authorize(Roles = "SuperAdmin")]
     public async Task<ActionResult> CreateSalesExecutive(CreateSalesExecutiveRequest request)
     {
         return await CreateUserInternal(request.FullName, request.Email, request.Phone, "SalesExecutive", request.Password);
     }
 
     [HttpGet("sales-executives/{id:int}")]
+    [Authorize(Roles = "SuperAdmin,Admin,Manager")]
     public async Task<ActionResult> GetSalesExecutiveDetail(int id)
     {
         var user = await db.Users.Include(x => x.Role)
@@ -95,7 +98,7 @@ public class UsersController(CrmDbContext db) : ControllerBase
     }
 
     [HttpPut("sales-executives/{id:int}")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [Authorize(Roles = "SuperAdmin")]
     public async Task<ActionResult> UpdateSalesExecutive(int id, UpdateSalesExecutiveRequest request)
     {
         var user = await db.Users.Include(x => x.Role)
@@ -137,4 +140,16 @@ public class UsersController(CrmDbContext db) : ControllerBase
         await db.SaveChangesAsync();
         return Created($"/api/users/{user.Id}", new { user.Id });
     }
+
+    [HttpPut("{id:int}")]
+    [Authorize(Roles = "SuperAdmin")]
+    public async Task<ActionResult> UpdateUser(int id, UpdateAdminUserRequest request)
+    {
+        var user = await db.Users.FindAsync(id); if (user is null) return NotFound();
+        var role = await db.Roles.FirstOrDefaultAsync(x => x.Name == request.Role && x.IsActive); if (role is null) return BadRequest(new { message = "Invalid role." });
+        if (await db.Users.AnyAsync(x => x.Id != id && x.Email == request.Email.Trim())) return Conflict(new { message = "Email already exists." });
+        user.FullName=request.FullName.Trim(); user.Email=request.Email.Trim(); user.Phone=request.Phone.Trim(); user.RoleId=role.Id; user.IsActive=request.IsActive;
+        if(!string.IsNullOrWhiteSpace(request.Password))user.PasswordHash=PasswordHash.Create(request.Password); await db.SaveChangesAsync(); return NoContent();
+    }
+    public record UpdateAdminUserRequest(string FullName,string Email,string Phone,string Role,bool IsActive,string? Password);
 }

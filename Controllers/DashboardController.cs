@@ -1,39 +1,5 @@
-using backend.Data;
-using backend.Models;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-
+using backend.Data;using backend.Extensions;using backend.Models;using backend.Services;using Microsoft.AspNetCore.Authorization;using Microsoft.AspNetCore.Mvc;using Microsoft.EntityFrameworkCore;
 namespace backend.Controllers;
-
-[ApiController]
-[Authorize]
-[Route("api/dashboard")]
-[Tags("Dashboard")]
-public class DashboardController(CrmDbContext db) : ControllerBase
-{
-    [HttpGet]
-    public async Task<ActionResult> GetSummary()
-    {
-        var now = DateTime.UtcNow;
-        var monthStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
-        var nextMonthStart = monthStart.AddMonths(1);
-        var totalCollection = await db.Payments
-            .Where(x => x.Status == PaymentStatus.Approved &&
-                        x.VerifiedAt >= monthStart &&
-                        x.VerifiedAt < nextMonthStart)
-            .SumAsync(x => x.Amount);
-        return Ok(new
-        {
-            leads = await db.Leads.CountAsync(),
-            customers = await db.Leads.CountAsync(x => x.Status == LeadStatus.Booked),
-            projects = await db.Projects.CountAsync(),
-            invoices = await db.Invoices.CountAsync(),
-            unpaidInvoices = await db.Invoices.CountAsync(x => x.Status != InvoiceStatus.Paid),
-            pendingPayments = await db.Payments.CountAsync(x => x.Status == PaymentStatus.Pending),
-            approvedPayments = await db.Payments.CountAsync(x => x.Status == PaymentStatus.Approved),
-            totalCollection,
-            totalCommission = await db.Commissions.Where(x => x.Status != CommissionStatus.Rejected).SumAsync(x => x.Amount)
-        });
-    }
-}
+[ApiController,Authorize,Route("api/dashboard"),Tags("Dashboard")]
+public class DashboardController(CrmDbContext db,IFinancialService financial):ControllerBase{
+ [HttpGet]public async Task<ActionResult>Get(){var customerIds=User.IsInRole("SalesExecutive")?await db.Customers.Where(x=>x.AssignedToId==User.UserId()).Select(x=>x.Id).ToListAsync():await db.Customers.Select(x=>x.Id).ToListAsync();var summaries=new List<FinancialSummary>();foreach(var id in customerIds)summaries.Add(await financial.SummaryAsync(id));if(User.IsInRole("SalesExecutive"))return Ok(new{assignedCustomers=customerIds.Count,customersWithCurrentDues=summaries.Count(x=>x.CurrentDue>0),customersWithOverduePayments=summaries.Count(x=>x.OverdueAmount>0),totalOutstanding=summaries.Sum(x=>x.OutstandingBalance),upcomingEmiReminders=summaries.Count(x=>x.NextEmiDueDate.HasValue)});return Ok(new{leads=await db.Leads.CountAsync(),customers=customerIds.Count,totalCollectible=summaries.Sum(x=>x.TotalAgreedAmount),totalCollected=summaries.Sum(x=>x.TotalPaid),totalOutstanding=summaries.Sum(x=>x.OutstandingBalance),totalDue=summaries.Sum(x=>x.CurrentDue),totalOverdue=summaries.Sum(x=>x.OverdueAmount),customersWithOverdueInstallments=summaries.Count(x=>x.OverdueAmount>0),pendingPayments=await db.Payments.CountAsync(x=>x.Status==PaymentStatus.Pending)});}}

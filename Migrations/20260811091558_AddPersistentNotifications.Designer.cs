@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using backend.Data;
 
@@ -11,9 +12,11 @@ using backend.Data;
 namespace backend.Migrations
 {
     [DbContext(typeof(CrmDbContext))]
-    partial class CrmDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260811091558_AddPersistentNotifications")]
+    partial class AddPersistentNotifications
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -36,21 +39,9 @@ namespace backend.Migrations
                     b.Property<int?>("CustomerId")
                         .HasColumnType("int");
 
-                    b.Property<string>("CustomerName")
-                        .HasColumnType("longtext");
-
-                    b.Property<decimal?>("DueAmount")
-                        .HasColumnType("decimal(65,30)");
-
-                    b.Property<DateTime?>("DueDate")
-                        .HasColumnType("datetime(6)");
-
                     b.Property<string>("EventKey")
                         .IsRequired()
                         .HasColumnType("varchar(255)");
-
-                    b.Property<string>("FileId")
-                        .HasColumnType("longtext");
 
                     b.Property<bool>("IsRead")
                         .HasColumnType("tinyint(1)");
@@ -61,9 +52,6 @@ namespace backend.Migrations
                     b.Property<string>("Message")
                         .IsRequired()
                         .HasColumnType("longtext");
-
-                    b.Property<decimal?>("OutstandingBalance")
-                        .HasColumnType("decimal(65,30)");
 
                     b.Property<DateTime?>("ReadAt")
                         .HasColumnType("datetime(6)");
@@ -90,41 +78,6 @@ namespace backend.Migrations
                     b.HasIndex("UserId", "IsRead", "CreatedAt");
 
                     b.ToTable("AppNotifications");
-                });
-
-            modelBuilder.Entity("backend.Models.AuditLog", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("Id"));
-
-                    b.Property<string>("Action")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<string>("DetailsJson")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.Property<string>("EntityId")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.Property<string>("EntityType")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.Property<int>("PerformedById")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("AuditLogs");
                 });
 
             modelBuilder.Entity("backend.Models.Commission", b =>
@@ -211,12 +164,6 @@ namespace backend.Migrations
                     b.Property<int?>("AssignedToId")
                         .HasColumnType("int");
 
-                    b.Property<DateTime?>("BookedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<int?>("BookedById")
-                        .HasColumnType("int");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
@@ -226,9 +173,6 @@ namespace backend.Migrations
 
                     b.Property<string>("Email")
                         .HasColumnType("longtext");
-
-                    b.Property<string>("FileId")
-                        .HasColumnType("varchar(255)");
 
                     b.Property<int?>("LeadId")
                         .HasColumnType("int");
@@ -264,56 +208,12 @@ namespace backend.Migrations
 
                     b.HasIndex("AssignedToId");
 
-                    b.HasIndex("BookedById");
-
-                    b.HasIndex("FileId")
-                        .IsUnique();
-
                     b.HasIndex("LeadId")
                         .IsUnique();
 
                     b.HasIndex("ProjectId");
 
                     b.ToTable("Customers");
-                });
-
-            modelBuilder.Entity("backend.Models.EmiInstallment", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("DueDate")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<decimal>("ExpectedAmount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<int>("FinancialAgreementId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("InstallmentNumber")
-                        .HasColumnType("int");
-
-                    b.Property<decimal>("PaidAmount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<DateTime?>("PaidAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("FinancialAgreementId", "InstallmentNumber")
-                        .IsUnique();
-
-                    b.ToTable("EmiInstallments");
                 });
 
             modelBuilder.Entity("backend.Models.EmployeeLocation", b =>
@@ -359,101 +259,6 @@ namespace backend.Migrations
                     b.HasIndex("UserId", "RecordedAtUtc");
 
                     b.ToTable("EmployeeLocations");
-                });
-
-            modelBuilder.Entity("backend.Models.FinancialAgreement", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<decimal>("BookingAmount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<int>("CreatedById")
-                        .HasColumnType("int");
-
-                    b.Property<int>("CustomerId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime?>("EmiStartDate")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<int?>("InstallmentCount")
-                        .HasColumnType("int");
-
-                    b.Property<decimal?>("MonthlyEmiAmount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<int>("PaymentPlan")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Remarks")
-                        .HasColumnType("longtext");
-
-                    b.Property<decimal>("TotalAgreedAmount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<int>("UpdatedById")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CreatedById");
-
-                    b.HasIndex("CustomerId")
-                        .IsUnique();
-
-                    b.HasIndex("UpdatedById");
-
-                    b.ToTable("FinancialAgreements");
-                });
-
-            modelBuilder.Entity("backend.Models.FinancialAuditLog", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("Id"));
-
-                    b.Property<int>("Action")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<int>("CustomerId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("DetailsJson")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.Property<int?>("PaymentId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("PerformedById")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CustomerId");
-
-                    b.HasIndex("PerformedById");
-
-                    b.ToTable("FinancialAuditLogs");
                 });
 
             modelBuilder.Entity("backend.Models.FollowUp", b =>
@@ -723,28 +528,6 @@ namespace backend.Migrations
                     b.ToTable("LeadReturns");
                 });
 
-            modelBuilder.Entity("backend.Models.NotificationSettings", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("DueCheckIntervalMinutes")
-                        .HasColumnType("int");
-
-                    b.Property<int>("DueSoonDays")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("NotificationSettings");
-                });
-
             modelBuilder.Entity("backend.Models.Payment", b =>
                 {
                     b.Property<int>("Id")
@@ -754,8 +537,7 @@ namespace backend.Migrations
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<decimal>("Amount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
+                        .HasColumnType("decimal(65,30)");
 
                     b.Property<string>("CollectionNumber")
                         .IsRequired()
@@ -770,23 +552,11 @@ namespace backend.Migrations
                     b.Property<string>("GatewayTransactionId")
                         .HasColumnType("longtext");
 
-                    b.Property<string>("IdempotencyKey")
-                        .HasColumnType("varchar(255)");
-
-                    b.Property<int?>("InstallmentId")
-                        .HasColumnType("int");
-
                     b.Property<int?>("InvoiceId")
                         .HasColumnType("int");
 
-                    b.Property<bool>("IsReversed")
-                        .HasColumnType("tinyint(1)");
-
                     b.Property<int>("Method")
                         .HasColumnType("int");
-
-                    b.Property<DateTime>("PaymentDate")
-                        .HasColumnType("datetime(6)");
 
                     b.Property<string>("ProofUrl")
                         .HasColumnType("longtext");
@@ -797,15 +567,6 @@ namespace backend.Migrations
                     b.Property<string>("Remarks")
                         .HasColumnType("longtext");
 
-                    b.Property<string>("ReversalReason")
-                        .HasColumnType("longtext");
-
-                    b.Property<DateTime?>("ReversedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<int?>("ReversedById")
-                        .HasColumnType("int");
-
                     b.Property<int>("SalesExecutiveId")
                         .HasColumnType("int");
 
@@ -814,9 +575,6 @@ namespace backend.Migrations
 
                     b.Property<int?>("SubmittedById")
                         .HasColumnType("int");
-
-                    b.Property<string>("TransactionReference")
-                        .HasColumnType("longtext");
 
                     b.Property<DateTime?>("VerifiedAt")
                         .HasColumnType("datetime(6)");
@@ -831,14 +589,7 @@ namespace backend.Migrations
 
                     b.HasIndex("CustomerId");
 
-                    b.HasIndex("IdempotencyKey")
-                        .IsUnique();
-
-                    b.HasIndex("InstallmentId");
-
                     b.HasIndex("InvoiceId");
-
-                    b.HasIndex("ReversedById");
 
                     b.HasIndex("SalesExecutiveId");
 
@@ -847,58 +598,6 @@ namespace backend.Migrations
                     b.HasIndex("VerifiedById");
 
                     b.ToTable("Payments");
-                });
-
-            modelBuilder.Entity("backend.Models.Permission", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasColumnType("varchar(255)");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.Property<int>("PermissionGroupId")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Code")
-                        .IsUnique();
-
-                    b.HasIndex("PermissionGroupId");
-
-                    b.ToTable("Permissions");
-                });
-
-            modelBuilder.Entity("backend.Models.PermissionGroup", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Description")
-                        .HasColumnType("longtext");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("varchar(255)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Name")
-                        .IsUnique();
-
-                    b.ToTable("PermissionGroups");
                 });
 
             modelBuilder.Entity("backend.Models.Project", b =>
@@ -947,12 +646,6 @@ namespace backend.Migrations
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<string>("Department")
-                        .HasColumnType("longtext");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("tinyint(1)");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("varchar(255)");
@@ -963,21 +656,6 @@ namespace backend.Migrations
                         .IsUnique();
 
                     b.ToTable("Roles");
-                });
-
-            modelBuilder.Entity("backend.Models.RolePermission", b =>
-                {
-                    b.Property<int>("RoleId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("PermissionId")
-                        .HasColumnType("int");
-
-                    b.HasKey("RoleId", "PermissionId");
-
-                    b.HasIndex("PermissionId");
-
-                    b.ToTable("RolePermissions");
                 });
 
             modelBuilder.Entity("backend.Models.SubGroup", b =>
@@ -1051,21 +729,6 @@ namespace backend.Migrations
                     b.HasIndex("RoleId");
 
                     b.ToTable("Users");
-                });
-
-            modelBuilder.Entity("backend.Models.UserPermission", b =>
-                {
-                    b.Property<int>("UserId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("PermissionId")
-                        .HasColumnType("int");
-
-                    b.HasKey("UserId", "PermissionId");
-
-                    b.HasIndex("PermissionId");
-
-                    b.ToTable("UserPermissions");
                 });
 
             modelBuilder.Entity("backend.Models.Vehicle", b =>
@@ -1236,10 +899,6 @@ namespace backend.Migrations
                         .WithMany()
                         .HasForeignKey("AssignedToId");
 
-                    b.HasOne("backend.Models.User", "BookedBy")
-                        .WithMany()
-                        .HasForeignKey("BookedById");
-
                     b.HasOne("backend.Models.Lead", "Lead")
                         .WithMany()
                         .HasForeignKey("LeadId")
@@ -1252,22 +911,9 @@ namespace backend.Migrations
 
                     b.Navigation("AssignedTo");
 
-                    b.Navigation("BookedBy");
-
                     b.Navigation("Lead");
 
                     b.Navigation("Project");
-                });
-
-            modelBuilder.Entity("backend.Models.EmiInstallment", b =>
-                {
-                    b.HasOne("backend.Models.FinancialAgreement", "FinancialAgreement")
-                        .WithMany("Installments")
-                        .HasForeignKey("FinancialAgreementId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("FinancialAgreement");
                 });
 
             modelBuilder.Entity("backend.Models.EmployeeLocation", b =>
@@ -1279,52 +925,6 @@ namespace backend.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
-                });
-
-            modelBuilder.Entity("backend.Models.FinancialAgreement", b =>
-                {
-                    b.HasOne("backend.Models.User", "CreatedBy")
-                        .WithMany()
-                        .HasForeignKey("CreatedById")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("backend.Models.Customer", "Customer")
-                        .WithOne("FinancialAgreement")
-                        .HasForeignKey("backend.Models.FinancialAgreement", "CustomerId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("backend.Models.User", "UpdatedBy")
-                        .WithMany()
-                        .HasForeignKey("UpdatedById")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("CreatedBy");
-
-                    b.Navigation("Customer");
-
-                    b.Navigation("UpdatedBy");
-                });
-
-            modelBuilder.Entity("backend.Models.FinancialAuditLog", b =>
-                {
-                    b.HasOne("backend.Models.Customer", "Customer")
-                        .WithMany()
-                        .HasForeignKey("CustomerId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("backend.Models.User", "PerformedBy")
-                        .WithMany()
-                        .HasForeignKey("PerformedById")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Customer");
-
-                    b.Navigation("PerformedBy");
                 });
 
             modelBuilder.Entity("backend.Models.FollowUp", b =>
@@ -1447,17 +1047,9 @@ namespace backend.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("backend.Models.EmiInstallment", "Installment")
-                        .WithMany()
-                        .HasForeignKey("InstallmentId");
-
                     b.HasOne("backend.Models.Invoice", "Invoice")
                         .WithMany()
                         .HasForeignKey("InvoiceId");
-
-                    b.HasOne("backend.Models.User", "ReversedBy")
-                        .WithMany()
-                        .HasForeignKey("ReversedById");
 
                     b.HasOne("backend.Models.User", "SalesExecutive")
                         .WithMany()
@@ -1476,28 +1068,13 @@ namespace backend.Migrations
 
                     b.Navigation("Customer");
 
-                    b.Navigation("Installment");
-
                     b.Navigation("Invoice");
-
-                    b.Navigation("ReversedBy");
 
                     b.Navigation("SalesExecutive");
 
                     b.Navigation("SubmittedBy");
 
                     b.Navigation("VerifiedBy");
-                });
-
-            modelBuilder.Entity("backend.Models.Permission", b =>
-                {
-                    b.HasOne("backend.Models.PermissionGroup", "PermissionGroup")
-                        .WithMany("Permissions")
-                        .HasForeignKey("PermissionGroupId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("PermissionGroup");
                 });
 
             modelBuilder.Entity("backend.Models.Project", b =>
@@ -1511,25 +1088,6 @@ namespace backend.Migrations
                     b.Navigation("SubGroup");
                 });
 
-            modelBuilder.Entity("backend.Models.RolePermission", b =>
-                {
-                    b.HasOne("backend.Models.Permission", "Permission")
-                        .WithMany()
-                        .HasForeignKey("PermissionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("backend.Models.Role", "Role")
-                        .WithMany("RolePermissions")
-                        .HasForeignKey("RoleId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Permission");
-
-                    b.Navigation("Role");
-                });
-
             modelBuilder.Entity("backend.Models.User", b =>
                 {
                     b.HasOne("backend.Models.Role", "Role")
@@ -1539,25 +1097,6 @@ namespace backend.Migrations
                         .IsRequired();
 
                     b.Navigation("Role");
-                });
-
-            modelBuilder.Entity("backend.Models.UserPermission", b =>
-                {
-                    b.HasOne("backend.Models.Permission", "Permission")
-                        .WithMany()
-                        .HasForeignKey("PermissionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("backend.Models.User", "User")
-                        .WithMany("UserPermissions")
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Permission");
-
-                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("backend.Models.VehicleBooking", b =>
@@ -1606,39 +1145,14 @@ namespace backend.Migrations
                     b.Navigation("Vehicle");
                 });
 
-            modelBuilder.Entity("backend.Models.Customer", b =>
-                {
-                    b.Navigation("FinancialAgreement");
-                });
-
-            modelBuilder.Entity("backend.Models.FinancialAgreement", b =>
-                {
-                    b.Navigation("Installments");
-                });
-
             modelBuilder.Entity("backend.Models.FollowUp", b =>
                 {
                     b.Navigation("Proofs");
                 });
 
-            modelBuilder.Entity("backend.Models.PermissionGroup", b =>
-                {
-                    b.Navigation("Permissions");
-                });
-
-            modelBuilder.Entity("backend.Models.Role", b =>
-                {
-                    b.Navigation("RolePermissions");
-                });
-
             modelBuilder.Entity("backend.Models.SubGroup", b =>
                 {
                     b.Navigation("Projects");
-                });
-
-            modelBuilder.Entity("backend.Models.User", b =>
-                {
-                    b.Navigation("UserPermissions");
                 });
 #pragma warning restore 612, 618
         }
