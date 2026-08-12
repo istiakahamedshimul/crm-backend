@@ -314,13 +314,16 @@ public class LeadsController(
                 LeadId = lead.Id, Name = lead.CustomerName, Phone = lead.Phone,
                 AlternativePhone = lead.AlternativePhone, Email = lead.Email, Address = lead.Address,
                 AssignedToId = lead.AssignedToId, ProjectId = lead.ProjectId,
-                PaymentStatus = "Unpaid", BookedAt = DateTime.UtcNow, BookedById = User.UserId()
+                PaymentStatus = "Unpaid", BookedAt = DateTime.UtcNow, BookedById = lead.AssignedToId
             });
             db.AuditLogs.Add(new AuditLog { EntityType = "Lead", EntityId = lead.Id.ToString(), Action = "StatusChangedToBooked", DetailsJson = $"{{\"previousStatus\":\"{previousStatus}\",\"newStatus\":\"Booked\"}}", PerformedById = User.UserId() });
         }
         else if (bookedCustomer is not null)
         {
             bookedCustomer.ProjectId = lead.ProjectId;
+            bookedCustomer.AssignedToId = lead.AssignedToId;
+            bookedCustomer.BookedAt ??= DateTime.UtcNow;
+            bookedCustomer.BookedById ??= lead.AssignedToId;
         }
         await db.SaveChangesAsync();
         if (request.AssignedToId.HasValue && request.AssignedToId != previousAssignedToId)
