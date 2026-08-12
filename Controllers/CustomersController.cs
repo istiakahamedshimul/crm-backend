@@ -137,7 +137,9 @@ public class CustomersController(CrmDbContext db, ILeadAssignmentService assignm
             NomineeName = request.NomineeName,
             NomineePhone = request.NomineePhone,
             AssignedToId = lead?.AssignedToId,
-            ProjectId = lead?.ProjectId
+            ProjectId = lead?.ProjectId,
+            BookedAt = lead is null ? null : DateTime.UtcNow,
+            BookedById = lead?.AssignedToId
         };
 
         if (lead is not null) lead.Status = LeadStatus.Booked;
@@ -170,7 +172,10 @@ public class CustomersController(CrmDbContext db, ILeadAssignmentService assignm
             NidOrPassport = request.NidOrPassport,
             NomineeName = request.NomineeName,
             NomineePhone = request.NomineePhone,
-            AssignedToId = lead.AssignedToId
+            AssignedToId = lead.AssignedToId,
+            ProjectId = lead.ProjectId,
+            BookedAt = DateTime.UtcNow,
+            BookedById = lead.AssignedToId
         };
 
         lead.Status = LeadStatus.Booked;
