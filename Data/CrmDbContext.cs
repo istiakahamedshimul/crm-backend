@@ -28,6 +28,7 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options) : DbContext(op
     public DbSet<FinancialAgreement> FinancialAgreements => Set<FinancialAgreement>(); public DbSet<EmiInstallment> EmiInstallments => Set<EmiInstallment>();
     public DbSet<FinancialAuditLog> FinancialAuditLogs => Set<FinancialAuditLog>(); public DbSet<AuditLog> AuditLogs => Set<AuditLog>(); public DbSet<NotificationSettings> NotificationSettings => Set<NotificationSettings>();
     public DbSet<DailyWorkReport> DailyWorkReports => Set<DailyWorkReport>();
+    public DbSet<MonthlySalesTarget> MonthlySalesTargets => Set<MonthlySalesTarget>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -67,5 +68,9 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options) : DbContext(op
         modelBuilder.Entity<Customer>().HasIndex(x => x.FileId).IsUnique();
         modelBuilder.Entity<DailyWorkReport>().HasIndex(x => new { x.SalesExecutiveId, x.WorkDate }).IsUnique();
         modelBuilder.Entity<DailyWorkReport>().HasOne(x => x.SalesExecutive).WithMany().HasForeignKey(x => x.SalesExecutiveId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<MonthlySalesTarget>().HasIndex(x => new { x.SalesExecutiveId, x.Month }).IsUnique();
+        modelBuilder.Entity<MonthlySalesTarget>().Property(x => x.MinimumCollectionAmount).HasPrecision(18, 2);
+        modelBuilder.Entity<MonthlySalesTarget>().HasOne(x => x.SalesExecutive).WithMany().HasForeignKey(x => x.SalesExecutiveId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<MonthlySalesTarget>().HasOne(x => x.UpdatedBy).WithMany().HasForeignKey(x => x.UpdatedById).OnDelete(DeleteBehavior.Restrict);
     }
 }

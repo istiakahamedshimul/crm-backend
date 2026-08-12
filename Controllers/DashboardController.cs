@@ -11,6 +11,24 @@ namespace backend.Controllers;
 [ApiController, Authorize, Route("api/dashboard"), Tags("Dashboard")]
 public class DashboardController(CrmDbContext db, IFinancialService financial) : ControllerBase
 {
+    [HttpGet("targets")]
+    [Authorize(Roles = "SalesExecutive")]
+    public async Task<ActionResult> GetTargetHistory()
+    {
+        var userId = User.UserId();
+        var targets = await db.MonthlySalesTargets.Where(x => x.SalesExecutiveId == userId).OrderByDescending(x => x.Month).ToListAsync();
+        var rows = new List<object>();
+        foreach (var target in targets)
+        {
+            var start = target.Month.ToDateTime(TimeOnly.MinValue);
+            var end = start.AddMonths(1);
+            var units = await db.Customers.CountAsync(x => x.BookedById == userId && x.BookedAt >= start && x.BookedAt < end);
+            var amount = await db.Payments.Where(x => x.SalesExecutiveId == userId && x.Status == PaymentStatus.Approved && !x.IsReversed && x.PaymentDate >= start && x.PaymentDate < end).SumAsync(x => (decimal?)x.Amount) ?? 0;
+            rows.Add(new { target.Month, salesUnitTarget = target.MinimumSalesUnits, salesUnitsAchieved = units, salesUnitVariance = units - target.MinimumSalesUnits, collectionTarget = target.MinimumCollectionAmount, collectionAchieved = amount, collectionVariance = amount - target.MinimumCollectionAmount });
+        }
+        return Ok(rows);
+    }
+
     [HttpGet]
     public async Task<ActionResult> Get([FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null)
     {
@@ -35,7 +53,18 @@ public class DashboardController(CrmDbContext db, IFinancialService financial) :
         var summaries = new List<FinancialSummary>();
         foreach (var id in customerIds) summaries.Add(await financial.SummaryAsync(id));
         if (User.IsInRole("SalesExecutive"))
-            return Ok(new { assignedCustomers = customerIds.Count, customersWithCurrentDues = summaries.Count(x => x.CurrentDue > 0), customersWithOverduePayments = summaries.Count(x => x.OverdueAmount > 0), totalOutstanding = summaries.Sum(x => x.OutstandingBalance), upcomingEmiReminders = summaries.Count(x => x.NextEmiDueDate.HasValue) });
+        {
+            var userId = User.UserId();
+            var month = new DateOnly(today.Year, today.Month, 1);
+            var monthStart = month.ToDateTime(TimeOnly.MinValue);
+            var monthEnd = monthStart.AddMonths(1);
+            var target = await db.MonthlySalesTargets.FirstOrDefaultAsync(x => x.SalesExecutiveId == userId && x.Month == month);
+            var unitTarget = target?.MinimumSalesUnits ?? 0;
+            var collectionTarget = target?.MinimumCollectionAmount ?? 0;
+            var units = await db.Customers.CountAsync(x => x.BookedById == userId && x.BookedAt >= monthStart && x.BookedAt < monthEnd);
+            var collection = await db.Payments.Where(x => x.SalesExecutiveId == userId && x.Status == PaymentStatus.Approved && !x.IsReversed && x.PaymentDate >= monthStart && x.PaymentDate < monthEnd).SumAsync(x => (decimal?)x.Amount) ?? 0;
+            return Ok(new { assignedCustomers = customerIds.Count, customersWithCurrentDues = summaries.Count(x => x.CurrentDue > 0), customersWithOverduePayments = summaries.Count(x => x.OverdueAmount > 0), totalOutstanding = summaries.Sum(x => x.OutstandingBalance), upcomingEmiReminders = summaries.Count(x => x.NextEmiDueDate.HasValue), currentTarget = new { month, salesUnitTarget = unitTarget, salesUnitsAchieved = units, salesUnitVariance = units - unitTarget, collectionTarget, collectionAchieved = collection, collectionVariance = collection - collectionTarget } });
+        }
 
         if (User.IsInRole("SubAdmin") || User.IsInRole("CS"))
             return Ok(new

@@ -5,6 +5,7 @@ using backend.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using backend.Extensions;
 
 namespace backend.Controllers;
 
@@ -77,11 +78,17 @@ public class UsersController(CrmDbContext db) : ControllerBase
             LeadStatus.InvoiceGenerated
         };
         var approvedCollections = db.Payments.Where(x =>
-            x.SalesExecutiveId == id && x.Status == PaymentStatus.Approved);
+            x.SalesExecutiveId == id && x.Status == PaymentStatus.Approved && !x.IsReversed);
+        var currentMonth = new DateOnly(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
+        var target = await db.MonthlySalesTargets.FirstOrDefaultAsync(x => x.SalesExecutiveId == id && x.Month == currentMonth);
+        var targetHistory = await BuildTargetHistory(id);
 
         return Ok(new
         {
             user.Id, user.FullName, user.Email, user.Phone, user.IsActive, user.CreatedAt, user.LastLoginAt,
+            currentTarget = TargetResult(currentMonth, target?.MinimumSalesUnits ?? 0, target?.MinimumCollectionAmount ?? 0,
+                targetHistory.FirstOrDefault(x => x.Month == currentMonth)),
+            targetHistory,
             metrics = new
             {
                 totalAssignedLeads = await leads.CountAsync(),
@@ -118,6 +125,8 @@ public class UsersController(CrmDbContext db) : ControllerBase
             string.IsNullOrWhiteSpace(request.Email) ||
             string.IsNullOrWhiteSpace(request.Phone))
             return BadRequest(new { message = "Name, email, and phone are required." });
+        if (request.MinimumSalesUnits < 0 || request.MinimumCollectionAmount < 0)
+            return BadRequest(new { message = "Monthly targets cannot be negative." });
         if (await db.Users.AnyAsync(x => x.Id != id && x.Email == request.Email.Trim()))
             return Conflict(new { message = "Email already exists." });
 
@@ -127,9 +136,42 @@ public class UsersController(CrmDbContext db) : ControllerBase
         user.IsActive = request.IsActive;
         if (!string.IsNullOrWhiteSpace(request.Password))
             user.PasswordHash = PasswordHash.Create(request.Password);
+        var month = request.TargetMonth is null
+            ? new DateOnly(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1)
+            : new DateOnly(request.TargetMonth.Value.Year, request.TargetMonth.Value.Month, 1);
+        var target = await db.MonthlySalesTargets.FirstOrDefaultAsync(x => x.SalesExecutiveId == id && x.Month == month);
+        if (target is null)
+        {
+            target = new MonthlySalesTarget { SalesExecutiveId = id, Month = month };
+            db.MonthlySalesTargets.Add(target);
+        }
+        target.MinimumSalesUnits = request.MinimumSalesUnits;
+        target.MinimumCollectionAmount = request.MinimumCollectionAmount;
+        target.UpdatedAt = DateTime.UtcNow;
+        target.UpdatedById = User.UserId();
         await db.SaveChangesAsync();
         return NoContent();
     }
+
+    private async Task<List<TargetProgress>> BuildTargetHistory(int id)
+    {
+        var targets = await db.MonthlySalesTargets.Where(x => x.SalesExecutiveId == id).OrderByDescending(x => x.Month).ToListAsync();
+        var result = new List<TargetProgress>();
+        foreach (var target in targets)
+        {
+            var start = target.Month.ToDateTime(TimeOnly.MinValue);
+            var end = start.AddMonths(1);
+            var units = await db.Customers.CountAsync(x => x.BookedById == id && x.BookedAt >= start && x.BookedAt < end);
+            var amount = await db.Payments.Where(x => x.SalesExecutiveId == id && x.Status == PaymentStatus.Approved && !x.IsReversed && x.PaymentDate >= start && x.PaymentDate < end).SumAsync(x => (decimal?)x.Amount) ?? 0;
+            result.Add(new TargetProgress(target.Month, target.MinimumSalesUnits, units, units - target.MinimumSalesUnits, target.MinimumCollectionAmount, amount, amount - target.MinimumCollectionAmount));
+        }
+        return result;
+    }
+
+    private static TargetProgress TargetResult(DateOnly month, int unitTarget, decimal collectionTarget, TargetProgress? actual) =>
+        actual ?? new TargetProgress(month, unitTarget, 0, -unitTarget, collectionTarget, 0, -collectionTarget);
+
+    public record TargetProgress(DateOnly Month, int SalesUnitTarget, int SalesUnitsAchieved, int SalesUnitVariance, decimal CollectionTarget, decimal CollectionAchieved, decimal CollectionVariance);
 
     private async Task<ActionResult> CreateUserInternal(string fullName, string email, string phone, string roleName, string password)
     {
