@@ -15,20 +15,20 @@ namespace backend.Controllers;
 [Tags("Users")]
 public class UsersController(CrmDbContext db) : ControllerBase
 {
-    private static readonly string[] AdminAccountRoles = ["Admin", "SubAdmin", "CS", "CA", "VehicleDepartment"];
+    private static readonly string[] AdminAccountRoles = ["SubAdmin", "CA", "Transportation", "BrandAndIT"];
     [HttpGet]
     [Authorize(Roles = "SuperAdmin")]
     public async Task<ActionResult<List<UserSummaryDto>>> GetUsers()
     {
         var users = await db.Users.Include(x => x.Role)
-            .Select(x => new UserSummaryDto(x.Id, x.FullName, x.Email, x.Phone, x.Role.Name, x.IsActive))
+            .Select(x => new UserSummaryDto(x.Id, x.FullName, x.Email, x.Phone, x.Designation, x.Role.Name, x.IsActive))
             .ToListAsync();
 
         return Ok(users);
     }
 
     [HttpGet("/api/sales-executives")]
-    [Authorize(Roles = "SuperAdmin,Admin,SubAdmin,Manager,CS,CA,VehicleDepartment")]
+    [Authorize(Roles = "SuperAdmin,BrandAndIT,CA,Transportation")]
     public async Task<ActionResult> GetSalesExecutives()
     {
         var users = await db.Users.Include(x => x.Role)
@@ -43,7 +43,7 @@ public class UsersController(CrmDbContext db) : ControllerBase
     [Authorize(Roles = "SuperAdmin")]
     public async Task<ActionResult> CreateUser(CreateUserRequest request)
     {
-        if (!AdminAccountRoles.Contains(request.Role)) return BadRequest(new { message = "Admin accounts can only use Admin, Sub Admin, CS, CA, or Vehicle Department roles." });
+        if (!AdminAccountRoles.Contains(request.Role)) return BadRequest(new { message = "Choose Sub Admin, CA, Transportation, or Brand & IT." });
         return await CreateUserInternal(request.FullName, request.Email, request.Phone, request.Role, request.Password);
     }
 
@@ -59,11 +59,18 @@ public class UsersController(CrmDbContext db) : ControllerBase
     [Authorize(Roles = "SuperAdmin")]
     public async Task<ActionResult> CreateSalesExecutive(CreateSalesExecutiveRequest request)
     {
-        return await CreateUserInternal(request.FullName, request.Email, request.Phone, "SalesExecutive", request.Password);
+        if (string.IsNullOrWhiteSpace(request.Designation)) return BadRequest(new { message = "Designation is required." });
+        var result = await CreateUserInternal(request.FullName, request.Email, request.Phone, "SalesExecutive", request.Password);
+        if (result is CreatedResult created && created.Value is not null)
+        {
+            var id = (int)(created.Value.GetType().GetProperty("Id")?.GetValue(created.Value) ?? 0);
+            var createdUser = await db.Users.FindAsync(id); if (createdUser is not null) { createdUser.Designation = request.Designation.Trim(); await db.SaveChangesAsync(); }
+        }
+        return result;
     }
 
     [HttpGet("sales-executives/{id:int}")]
-    [Authorize(Roles = "SuperAdmin,Admin,Manager")]
+    [Authorize(Roles = "SuperAdmin,BrandAndIT")]
     public async Task<ActionResult> GetSalesExecutiveDetail(int id)
     {
         var user = await db.Users.Include(x => x.Role)
@@ -85,7 +92,7 @@ public class UsersController(CrmDbContext db) : ControllerBase
 
         return Ok(new
         {
-            user.Id, user.FullName, user.Email, user.Phone, user.IsActive, user.CreatedAt, user.LastLoginAt,
+            user.Id, user.FullName, user.Email, user.Phone, user.Designation, user.IsActive, user.CreatedAt, user.LastLoginAt,
             currentTarget = TargetResult(currentMonth, target?.MinimumSalesUnits ?? 0, target?.MinimumCollectionAmount ?? 0,
                 targetHistory.FirstOrDefault(x => x.Month == currentMonth)),
             targetHistory,
@@ -133,6 +140,8 @@ public class UsersController(CrmDbContext db) : ControllerBase
         user.FullName = request.FullName.Trim();
         user.Email = request.Email.Trim();
         user.Phone = request.Phone.Trim();
+        if (string.IsNullOrWhiteSpace(request.Designation)) return BadRequest(new { message = "Designation is required." });
+        user.Designation = request.Designation.Trim();
         user.IsActive = request.IsActive;
         if (!string.IsNullOrWhiteSpace(request.Password))
             user.PasswordHash = PasswordHash.Create(request.Password);
@@ -197,7 +206,7 @@ public class UsersController(CrmDbContext db) : ControllerBase
     [Authorize(Roles = "SuperAdmin")]
     public async Task<ActionResult> UpdateUser(int id, UpdateAdminUserRequest request)
     {
-        if (!AdminAccountRoles.Contains(request.Role)) return BadRequest(new { message = "Admin accounts can only use Admin, Sub Admin, CS, CA, or Vehicle Department roles." });
+        if (!AdminAccountRoles.Contains(request.Role)) return BadRequest(new { message = "Choose Sub Admin, CA, Transportation, or Brand & IT." });
         var user = await db.Users.FindAsync(id); if (user is null) return NotFound();
         var currentRole = await db.Roles.Where(x => x.Id == user.RoleId).Select(x => x.Name).SingleAsync();
         if (!AdminAccountRoles.Contains(currentRole)) return BadRequest(new { message = "This account is managed in its dedicated user section." });

@@ -21,7 +21,7 @@ public class ProfileController(CrmDbContext db) : ControllerBase
         var userId = User.UserId();
         var user = await db.Users.Include(x => x.Role)
             .Where(x => x.Id == userId)
-            .Select(x => new { x.Id, x.FullName, x.Email, Role = x.Role.Name, x.Phone })
+            .Select(x => new { x.Id, x.FullName, x.Email, Role = x.Role.Name, x.Phone, x.Designation })
             .FirstOrDefaultAsync();
 
         return user is null ? NotFound() : Ok(user);

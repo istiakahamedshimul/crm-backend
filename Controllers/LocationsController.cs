@@ -50,7 +50,7 @@ public class LocationsController(CrmDbContext db) : ControllerBase
     }
 
     [HttpGet("live")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [Authorize(Roles = "SuperAdmin,BrandAndIT")]
     public async Task<ActionResult> Live()
     {
         var employees = await db.Users

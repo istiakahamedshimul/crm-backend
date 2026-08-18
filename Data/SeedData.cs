@@ -7,7 +7,17 @@ public static class SeedData
 {
     public static void EnsureSeeded(CrmDbContext db)
     {
-        var roleNames = new[] { "SuperAdmin", "Admin", "SubAdmin", "Manager", "SalesExecutive", "Accountant", "Customer", "CS", "CA", "VehicleDepartment" };
+        var legacyTransportation = db.Roles.FirstOrDefault(x => x.Name == "VehicleDepartment");
+        var transportation = db.Roles.FirstOrDefault(x => x.Name == "Transportation");
+        if (legacyTransportation is not null && transportation is null) legacyTransportation.Name = "Transportation";
+        else if (legacyTransportation is not null && transportation is not null)
+            foreach (var user in db.Users.Where(x => x.RoleId == legacyTransportation.Id)) user.RoleId = transportation.Id;
+        var legacyBrand = db.Roles.FirstOrDefault(x => x.Name == "Admin");
+        var brand = db.Roles.FirstOrDefault(x => x.Name == "BrandAndIT");
+        if (legacyBrand is not null && brand is null) legacyBrand.Name = "BrandAndIT";
+        else if (legacyBrand is not null && brand is not null)
+            foreach (var user in db.Users.Where(x => x.RoleId == legacyBrand.Id)) user.RoleId = brand.Id;
+        var roleNames = new[] { "SuperAdmin", "SubAdmin", "SalesExecutive", "CA", "Transportation", "BrandAndIT" };
         foreach (var roleName in roleNames)
         {
             if (!db.Roles.Any(x => x.Name == roleName))
@@ -16,6 +26,11 @@ public static class SeedData
             }
         }
 
+        db.SaveChanges();
+        var legacyCs = db.Roles.FirstOrDefault(x => x.Name == "CS");
+        var caRoleForMigration = db.Roles.First(x => x.Name == "CA");
+        if (legacyCs is not null)
+            foreach (var user in db.Users.Where(x => x.RoleId == legacyCs.Id)) user.RoleId = caRoleForMigration.Id;
         db.SaveChanges();
 
         var definitions = new Dictionary<string, string[]>
@@ -32,16 +47,20 @@ public static class SeedData
                 if (!db.Permissions.Any(x => x.Code == code)) db.Permissions.Add(new Permission { Code = code, Name = code.Replace('.', ' '), PermissionGroup = group });
         }
         db.SaveChanges();
+        var fixedRoleNames = new[] { "SubAdmin", "CA", "Transportation", "BrandAndIT" };
+        var fixedRoleIds = db.Roles.Where(x => fixedRoleNames.Contains(x.Name)).Select(x => x.Id).ToArray();
+        db.RolePermissions.RemoveRange(db.RolePermissions.Where(x => fixedRoleIds.Contains(x.RoleId)));
+        db.UserPermissions.RemoveRange(db.UserPermissions.Where(x => fixedRoleIds.Contains(x.User.RoleId)));
+        db.SaveChanges();
         void Grant(string roleName, params string[] codes) {
             var role = db.Roles.First(x => x.Name == roleName); foreach (var permission in db.Permissions.Where(x => codes.Contains(x.Code)))
                 if (!db.RolePermissions.Any(x => x.RoleId == role.Id && x.PermissionId == permission.Id)) db.RolePermissions.Add(new RolePermission { RoleId = role.Id, PermissionId = permission.Id });
         }
-        Grant("CS", PermissionCodes.CustomersView, PermissionCodes.AgreementsManage, PermissionCodes.EmiManage, PermissionCodes.NotificationsManage);
-        Grant("CA", PermissionCodes.CustomersView, PermissionCodes.PaymentsView, PermissionCodes.PaymentsRecord, PermissionCodes.PaymentsApprove, PermissionCodes.PaymentsReverse, PermissionCodes.ReportsView);
-        Grant("VehicleDepartment", PermissionCodes.TransportationManage);
-        Grant("SubAdmin", PermissionCodes.LeadsManage, PermissionCodes.BookingsManage, PermissionCodes.CustomersView, PermissionCodes.NotificationsManage, PermissionCodes.ReportsView);
+        Grant("CA", PermissionCodes.CustomersView, PermissionCodes.AgreementsManage, PermissionCodes.EmiManage, PermissionCodes.PaymentsView, PermissionCodes.PaymentsRecord, PermissionCodes.PaymentsApprove, PermissionCodes.PaymentsReverse, PermissionCodes.ReportsView);
+        Grant("Transportation", PermissionCodes.TransportationManage, PermissionCodes.CustomersView);
+        Grant("SubAdmin", PermissionCodes.CustomersView, PermissionCodes.ReportsView);
+        Grant("BrandAndIT", PermissionCodes.LeadsManage, PermissionCodes.BookingsManage, PermissionCodes.CustomersView, PermissionCodes.NotificationsManage, PermissionCodes.ReportsView);
         Grant("SalesExecutive", PermissionCodes.CustomersView);
-        Grant("Admin", PermissionCodes.LeadsManage, PermissionCodes.CustomersView, PermissionCodes.PaymentsView, PermissionCodes.PaymentsRecord, PermissionCodes.PaymentsApprove, PermissionCodes.AgreementsManage, PermissionCodes.EmiManage, PermissionCodes.TransportationManage, PermissionCodes.NotificationsManage, PermissionCodes.ReportsView);
         db.SaveChanges();
 
         // Repair legacy Booked leads that predate automatic conversion. This is
@@ -61,8 +80,7 @@ public static class SeedData
 
         var adminRole = db.Roles.First(x => x.Name == "SuperAdmin");
         var salesRole = db.Roles.First(x => x.Name == "SalesExecutive");
-        var vehicleRole = db.Roles.First(x => x.Name == "VehicleDepartment");
-        var csRole = db.Roles.First(x => x.Name == "CS");
+        var vehicleRole = db.Roles.First(x => x.Name == "Transportation");
         var subAdminRole = db.Roles.First(x => x.Name == "SubAdmin");
 
         if (!db.Users.Any(x => x.Email == "admin@crm.local"))
@@ -93,7 +111,6 @@ public static class SeedData
         if (!string.IsNullOrWhiteSpace(demoPassword))
         {
             AddDemoUser("Demo Vehicle Officer", "vehicle.demo@crm.local", "01900000001", vehicleRole, demoPassword);
-            AddDemoUser("Demo CS Officer", "cs.demo@crm.local", "01900000002", csRole, demoPassword);
             AddDemoUser("Demo Sub Admin", "subadmin.demo@crm.local", "01900000003", subAdminRole, demoPassword);
         }
 

@@ -109,9 +109,10 @@ app.UseStaticFiles();
 app.UseAuthentication();
 app.Use(async (context, next) =>
 {
-    if (context.User.IsInRole("VehicleDepartment") && context.Request.Path.StartsWithSegments("/api") &&
+    if (context.User.IsInRole("Transportation") && context.Request.Path.StartsWithSegments("/api") &&
         !context.Request.Path.StartsWithSegments("/api/vehicles") && !context.Request.Path.StartsWithSegments("/api/vehicle-bookings") && !context.Request.Path.StartsWithSegments("/api/auth") &&
-        !context.Request.Path.StartsWithSegments("/api/me") && !context.Request.Path.StartsWithSegments("/api/dashboard"))
+        !context.Request.Path.StartsWithSegments("/api/me") && !context.Request.Path.StartsWithSegments("/api/dashboard") &&
+        !context.Request.Path.StartsWithSegments("/api/customers") && !context.Request.Path.StartsWithSegments("/api/leads") && !context.Request.Path.StartsWithSegments("/api/projects") && !context.Request.Path.StartsWithSegments("/api/sales-executives"))
     { context.Response.StatusCode = StatusCodes.Status403Forbidden; return; }
     await next();
 });

@@ -23,6 +23,7 @@ public class VehicleBooking
     public int? VehicleId { get; set; }
     public Vehicle? Vehicle { get; set; }
     public string? Driver { get; set; }
+    public string? DriverPhone { get; set; }
     public DateTime ClientLocalDateTime { get; set; }
     public int TimezoneOffsetMinutes { get; set; }
     public VehicleBookingStatus Status { get; set; } = VehicleBookingStatus.Pending;

@@ -34,7 +34,7 @@ public class LeadsController(
     }
 
     [HttpPost("import")]
-    [Authorize(Roles = "SuperAdmin,Admin,SubAdmin")]
+    [Authorize(Roles = "SuperAdmin,BrandAndIT")]
     [RequestSizeLimit(10_000_000)]
     public async Task<ActionResult> Import(IFormFile file, [FromForm] bool autoAssign = false)
     {
@@ -148,7 +148,7 @@ public class LeadsController(
     }
 
     [HttpGet("returned")]
-    [Authorize(Roles = "SuperAdmin,Admin,SubAdmin,Manager")]
+    [Authorize(Roles = "SuperAdmin,BrandAndIT")]
     public async Task<ActionResult> GetReturnedLeads()
     {
         var history = await db.LeadReturns
@@ -173,7 +173,7 @@ public class LeadsController(
     }
 
     [HttpPost]
-    [Authorize(Roles = "SuperAdmin,Admin,SubAdmin")]
+    [Authorize(Roles = "SuperAdmin,BrandAndIT")]
     public async Task<ActionResult> CreateLead(CreateLeadRequest request)
     {
         if (!request.AssignedToId.HasValue)
@@ -253,10 +253,10 @@ public class LeadsController(
         var previousAssignedToId = lead.AssignedToId;
         var previousStatus = lead.Status;
         if (previousStatus == LeadStatus.Booked && request.Status.HasValue && request.Status.Value != LeadStatus.Booked &&
-            !User.IsInRole("SuperAdmin") && !User.IsInRole("Admin"))
+            !User.IsInRole("SuperAdmin") && !User.IsInRole("BrandAndIT"))
             return StatusCode(StatusCodes.Status403Forbidden,
                 new { message = "Only an administrator can reopen a booked lead." });
-        if ((User.IsInRole("SuperAdmin") || User.IsInRole("Admin") || User.IsInRole("SubAdmin")) &&
+        if ((User.IsInRole("SuperAdmin") || User.IsInRole("BrandAndIT")) &&
             request.CustomerName is not null && request.Phone is not null)
         {
             if (string.IsNullOrWhiteSpace(request.CustomerName) || string.IsNullOrWhiteSpace(request.Phone))
@@ -277,7 +277,7 @@ public class LeadsController(
         }
         if (request.AssignedToId.HasValue)
         {
-            if (!User.IsInRole("SuperAdmin") && !User.IsInRole("Admin") && !User.IsInRole("SubAdmin"))
+            if (!User.IsInRole("SuperAdmin") && !User.IsInRole("BrandAndIT"))
             {
                 return Forbid();
             }
