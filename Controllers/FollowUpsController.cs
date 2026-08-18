@@ -46,7 +46,12 @@ public class FollowUpsController(CrmDbContext db) : ControllerBase
         var lead = await db.Leads.FindAsync(request.LeadId);
         if (lead is null) return BadRequest(new { message = "Lead not found." });
         if (User.IsInRole("SalesExecutive") && lead.AssignedToId != User.UserId()) return Forbid();
+        if (lead.Status == LeadStatus.Booked && request.NewLeadStatus.HasValue && request.NewLeadStatus.Value != LeadStatus.Booked &&
+            !User.IsInRole("SuperAdmin") && !User.IsInRole("Admin"))
+            return StatusCode(StatusCodes.Status403Forbidden,
+                new { message = "Only an administrator can reopen a booked lead." });
 
+        var previousStatus = lead.Status;
         var followUp = new FollowUp
         {
             LeadId = request.LeadId,
@@ -68,8 +73,14 @@ public class FollowUpsController(CrmDbContext db) : ControllerBase
                 LeadId = lead.Id, Name = lead.CustomerName, Phone = lead.Phone,
                 AlternativePhone = lead.AlternativePhone, Email = lead.Email, Address = lead.Address,
                 AssignedToId = lead.AssignedToId, ProjectId = lead.ProjectId,
-                PaymentStatus = "Positive"
+                PaymentStatus = "Unpaid", BookedAt = DateTime.UtcNow, BookedById = lead.AssignedToId
             });
+            db.AuditLogs.Add(new AuditLog { EntityType = "Lead", EntityId = lead.Id.ToString(), Action = "StatusChangedToBooked", DetailsJson = "{\"source\":\"FollowUp\"}", PerformedById = User.UserId() });
+        }
+        if (previousStatus == LeadStatus.Booked && lead.Status != LeadStatus.Booked)
+        {
+            var customer = await db.Customers.FirstOrDefaultAsync(x => x.LeadId == lead.Id);
+            if (customer is not null) { customer.BookedAt = null; customer.BookedById = null; }
         }
         await db.SaveChangesAsync();
 

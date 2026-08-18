@@ -135,7 +135,8 @@ public class LeadsController(
     public async Task<ActionResult<List<LeadDto>>> GetLeads([FromQuery] ProjectType? projectType = null)
     {
         var query = db.Leads.Include(x => x.AssignedTo).Include(x => x.Project).AsQueryable();
-        if (User.IsInRole("SalesExecutive")) query = query.Where(x => x.AssignedToId == User.UserId());
+        if (User.IsInRole("SalesExecutive"))
+            query = query.Where(x => x.AssignedToId == User.UserId() && x.Status != LeadStatus.Booked);
         if (projectType.HasValue)
             query = query.Where(x => x.Project != null && x.Project.Type == projectType);
 
@@ -251,6 +252,10 @@ public class LeadsController(
         if (User.IsInRole("SalesExecutive") && lead.AssignedToId != User.UserId()) return Forbid();
         var previousAssignedToId = lead.AssignedToId;
         var previousStatus = lead.Status;
+        if (previousStatus == LeadStatus.Booked && request.Status.HasValue && request.Status.Value != LeadStatus.Booked &&
+            !User.IsInRole("SuperAdmin") && !User.IsInRole("Admin"))
+            return StatusCode(StatusCodes.Status403Forbidden,
+                new { message = "Only an administrator can reopen a booked lead." });
         if ((User.IsInRole("SuperAdmin") || User.IsInRole("Admin") || User.IsInRole("SubAdmin")) &&
             request.CustomerName is not null && request.Phone is not null)
         {
@@ -324,6 +329,12 @@ public class LeadsController(
             bookedCustomer.AssignedToId = lead.AssignedToId;
             bookedCustomer.BookedAt ??= DateTime.UtcNow;
             bookedCustomer.BookedById ??= lead.AssignedToId;
+        }
+        if (previousStatus == LeadStatus.Booked && lead.Status != LeadStatus.Booked)
+        {
+            var reopenedCustomer = await db.Customers.FirstOrDefaultAsync(x => x.LeadId == lead.Id);
+            if (reopenedCustomer is not null) { reopenedCustomer.BookedAt = null; reopenedCustomer.BookedById = null; }
+            db.AuditLogs.Add(new AuditLog { EntityType = "Lead", EntityId = lead.Id.ToString(), Action = "BookedLeadReopened", DetailsJson = $"{{\"newStatus\":\"{lead.Status}\"}}", PerformedById = User.UserId() });
         }
         await db.SaveChangesAsync();
         if (request.AssignedToId.HasValue && request.AssignedToId != previousAssignedToId)

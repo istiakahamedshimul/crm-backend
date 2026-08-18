@@ -104,7 +104,7 @@ public class UsersController(CrmDbContext db) : ControllerBase
                     .Where(x => x.SalesExecutiveId == id && x.Status != CommissionStatus.Rejected)
                     .SumAsync(x => x.Amount)
             },
-            recentLeads = await leads.OrderByDescending(x => x.CreatedAt).Take(20)
+            recentLeads = await leads.Where(x => x.Status != LeadStatus.Booked).OrderByDescending(x => x.CreatedAt).Take(20)
                 .Select(x => new
                 {
                     x.Id, x.CustomerName, x.Phone, x.Status, x.ProjectId,
