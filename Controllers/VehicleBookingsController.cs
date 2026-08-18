@@ -46,6 +46,7 @@ public class VehicleBookingsController(CrmDbContext db) : ControllerBase
                 x.VehicleId,
                 Vehicle = x.Vehicle == null ? null : x.Vehicle.RegistrationNumber,
                 x.Driver,
+                x.DriverPhone,
                 x.Status,
                 x.AdminRemarks,
                 x.CreatedAt
@@ -100,32 +101,35 @@ public class VehicleBookingsController(CrmDbContext db) : ControllerBase
     }
 
     [HttpPost("admin")]
-    [Authorize(Roles = "SuperAdmin,Admin,VehicleDepartment")]
+    [Authorize(Roles = "SuperAdmin,Transportation")]
     public async Task<ActionResult> CreateAdmin(CreateAdminVehicleBookingRequest request)
     {
-        var customer = await db.Customers.FindAsync(request.CustomerId);
+        var customer = request.CustomerId.HasValue ? await db.Customers.FindAsync(request.CustomerId.Value) : null;
+        var lead = request.LeadId.HasValue ? await db.Leads.FindAsync(request.LeadId.Value) : null;
         var vehicle = await db.Vehicles.FindAsync(request.VehicleId);
-        if (customer is null || customer.AssignedToId is null) return BadRequest(new { message = "Customer must have an assigned sales employee." });
+        if ((customer is null) == (lead is null)) return BadRequest(new { message = "Select either one customer or one lead." });
+        var salesExecutiveId = customer?.AssignedToId ?? lead?.AssignedToId;
+        if (salesExecutiveId is null) return BadRequest(new { message = "The selected customer or lead must have an assigned sales employee." });
         if (!await db.Projects.AnyAsync(x => x.Id == request.ProjectId)) return BadRequest(new { message = "Project not found." });
         if (vehicle is null || !vehicle.IsActive) return BadRequest(new { message = "Select an active vehicle." });
         // Capacity is informational; admins may assign any active vehicle.
         // if (request.PersonCount < 1 || request.PersonCount > vehicle.SeatingCapacity) return BadRequest(new { message = "Visitor count exceeds vehicle capacity." });
         if (request.VisitDate < DateOnly.FromDateTime(DateTime.Today) || string.IsNullOrWhiteSpace(request.PickupPlace)) return BadRequest(new { message = "Enter a valid visit date and pickup location." });
-        var booking = new VehicleBooking { SalesExecutiveId = customer.AssignedToId.Value, CustomerId = request.CustomerId, ProjectId = request.ProjectId,
+        var booking = new VehicleBooking { SalesExecutiveId = salesExecutiveId.Value, CustomerId = customer?.Id, LeadId = lead?.Id, ProjectId = request.ProjectId,
             VisitDate = request.VisitDate, VisitTime = request.VisitTime, PersonCount = request.PersonCount, PickupPlace = request.PickupPlace.Trim(),
             Purpose = request.Purpose.Trim(), AdditionalInformation = request.AdditionalInformation?.Trim(), VehicleId = request.VehicleId,
-            Driver = request.Driver?.Trim(), Status = VehicleBookingStatus.Approved, AdminRemarks = request.Remarks?.Trim(), ReviewedById = User.UserId(), ReviewedAt = DateTime.UtcNow };
+            Driver = request.Driver?.Trim(), DriverPhone = request.DriverPhone?.Trim(), Status = VehicleBookingStatus.Approved, AdminRemarks = request.Remarks?.Trim(), ReviewedById = User.UserId(), ReviewedAt = DateTime.UtcNow };
         db.VehicleBookings.Add(booking); await db.SaveChangesAsync();
         return Created($"/api/vehicle-bookings/{booking.Id}", new { booking.Id, booking.Status });
     }
 
     [HttpPost("{id:int}/approve")]
-    [Authorize(Roles = "SuperAdmin,Admin,VehicleDepartment")]
+    [Authorize(Roles = "SuperAdmin,Transportation")]
     public Task<ActionResult> Approve(int id, ReviewVehicleBookingRequest request) =>
         Review(id, VehicleBookingStatus.Approved, request);
 
     [HttpPost("{id:int}/reject")]
-    [Authorize(Roles = "SuperAdmin,Admin,VehicleDepartment")]
+    [Authorize(Roles = "SuperAdmin,Transportation")]
     public Task<ActionResult> Reject(int id, ReviewVehicleBookingRequest request) =>
         Review(id, VehicleBookingStatus.Rejected, request);
 
@@ -141,7 +145,7 @@ public class VehicleBookingsController(CrmDbContext db) : ControllerBase
             if (vehicle is null || !vehicle.IsActive) return BadRequest(new { message = "Select an active vehicle." });
             // Capacity is informational; admins may assign any active vehicle.
             // if (booking.PersonCount > vehicle.SeatingCapacity) return BadRequest(new { message = "Visitor count exceeds vehicle capacity." });
-            booking.VehicleId = vehicle.Id; booking.Driver = request.Driver?.Trim();
+            booking.VehicleId = vehicle.Id; booking.Driver = request.Driver?.Trim(); booking.DriverPhone = request.DriverPhone?.Trim();
         }
         booking.Status = status;
         booking.AdminRemarks = request.Remarks?.Trim();

@@ -12,8 +12,8 @@ public record CreateVehicleBookingRequest(
     DateTime ClientLocalDateTime,
     int TimezoneOffsetMinutes);
 
-public record ReviewVehicleBookingRequest(int? VehicleId, string? Driver, string? Remarks);
+public record ReviewVehicleBookingRequest(int? VehicleId, string? Driver, string? DriverPhone, string? Remarks);
 
-public record CreateAdminVehicleBookingRequest(int CustomerId, int ProjectId, DateOnly VisitDate,
+public record CreateAdminVehicleBookingRequest(int? CustomerId, int? LeadId, int ProjectId, DateOnly VisitDate,
     TimeOnly VisitTime, int PersonCount, string PickupPlace, string Purpose,
-    string? AdditionalInformation, int VehicleId, string? Driver, string? Remarks);
+    string? AdditionalInformation, int VehicleId, string? Driver, string? DriverPhone, string? Remarks);

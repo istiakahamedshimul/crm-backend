@@ -65,7 +65,7 @@ public class CustomersController(CrmDbContext db, ILeadAssignmentService assignm
     }
 
     [HttpGet("available-for-lead")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [Authorize(Roles = "SuperAdmin,BrandAndIT")]
     public async Task<ActionResult> GetCustomersAvailableForLead()
     {
         var customers = await db.Customers
@@ -81,7 +81,7 @@ public class CustomersController(CrmDbContext db, ILeadAssignmentService assignm
     }
 
     [HttpPut("{id:int}/project")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [Authorize(Roles = "SuperAdmin,BrandAndIT")]
     public async Task<ActionResult> UpdateProject(int id, UpdateCustomerProjectRequest request)
     {
         var customer = await db.Customers.FindAsync(id);
@@ -105,7 +105,7 @@ public class CustomersController(CrmDbContext db, ILeadAssignmentService assignm
     public record SetFileIdRequest(string FileId);
 
     [HttpPost]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [Authorize(Roles = "SuperAdmin,BrandAndIT")]
     public async Task<ActionResult> CreateCustomer(CreateCustomerRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.Phone))
@@ -149,7 +149,7 @@ public class CustomersController(CrmDbContext db, ILeadAssignmentService assignm
     }
 
     [HttpPost("from-lead/{leadId:int}")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [Authorize(Roles = "SuperAdmin,BrandAndIT")]
     public async Task<ActionResult> CreateFromLead(int leadId, CreateCustomerFromLeadRequest request)
     {
         var lead = await db.Leads.FindAsync(leadId);

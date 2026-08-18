@@ -47,7 +47,7 @@ public class FollowUpsController(CrmDbContext db) : ControllerBase
         if (lead is null) return BadRequest(new { message = "Lead not found." });
         if (User.IsInRole("SalesExecutive") && lead.AssignedToId != User.UserId()) return Forbid();
         if (lead.Status == LeadStatus.Booked && request.NewLeadStatus.HasValue && request.NewLeadStatus.Value != LeadStatus.Booked &&
-            !User.IsInRole("SuperAdmin") && !User.IsInRole("Admin"))
+            !User.IsInRole("SuperAdmin") && !User.IsInRole("BrandAndIT"))
             return StatusCode(StatusCodes.Status403Forbidden,
                 new { message = "Only an administrator can reopen a booked lead." });
 

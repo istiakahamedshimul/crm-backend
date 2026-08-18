@@ -31,7 +31,7 @@ public class DailyWorkReportsController(CrmDbContext db) : ControllerBase
     [HttpGet("mine"), Authorize(Roles = "SalesExecutive")]
     public async Task<ActionResult> Mine() => Ok(await db.DailyWorkReports.Where(x => x.SalesExecutiveId == User.UserId()).OrderByDescending(x => x.WorkDate).Take(30).Select(x => new { x.Id, x.WorkDate, x.Summary, x.InputLanguage, x.UpdatedAt }).ToListAsync());
 
-    [HttpGet, Authorize(Roles = "SuperAdmin,Admin,SubAdmin,Manager")]
+    [HttpGet, Authorize(Roles = "SuperAdmin,BrandAndIT")]
     public async Task<ActionResult> Get([FromQuery] DateOnly? from = null, [FromQuery] DateOnly? to = null, [FromQuery] int? salesExecutiveId = null)
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(6)); var start = from ?? today; var end = to ?? today;

@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 namespace backend.Controllers;
 
 [ApiController]
-[Authorize(Roles = "SuperAdmin,Admin")]
+[Authorize(Roles = "SuperAdmin,BrandAndIT")]
 [Route("api/lead-automation-settings")]
 [Tags("Lead automation")]
 public class LeadAutomationSettingsController(CrmDbContext db) : ControllerBase

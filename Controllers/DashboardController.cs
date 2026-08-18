@@ -12,7 +12,7 @@ namespace backend.Controllers;
 public class DashboardController(CrmDbContext db, IFinancialService financial) : ControllerBase
 {
     [HttpGet("sales-report")]
-    [Authorize(Roles = "SuperAdmin,Admin,Manager,SalesExecutive")]
+    [Authorize(Roles = "SuperAdmin,BrandAndIT,SalesExecutive")]
     public async Task<ActionResult> GetSalesReport([FromQuery] int salesExecutiveId, [FromQuery] DateTime from, [FromQuery] DateTime to)
     {
         var rangeFrom = from.Date;
@@ -100,7 +100,7 @@ public class DashboardController(CrmDbContext db, IFinancialService financial) :
         if (rangeFrom > rangeTo) return BadRequest(new { message = "Dashboard start date cannot be after the end date." });
         var endExclusive = rangeTo.AddDays(1);
 
-        if (User.IsInRole("VehicleDepartment"))
+        if (User.IsInRole("Transportation"))
             return Ok(new
             {
                 leads = await db.VehicleBookings.CountAsync(x => x.CreatedAt >= rangeFrom && x.CreatedAt < endExclusive),
@@ -128,12 +128,12 @@ public class DashboardController(CrmDbContext db, IFinancialService financial) :
             return Ok(new { assignedCustomers = customerIds.Count, customersWithCurrentDues = summaries.Count(x => x.CurrentDue > 0), customersWithOverduePayments = summaries.Count(x => x.OverdueAmount > 0), totalOutstanding = summaries.Sum(x => x.OutstandingBalance), upcomingEmiReminders = summaries.Count(x => x.NextEmiDueDate.HasValue), currentTarget = new { month, salesUnitTarget = unitTarget, salesUnitsAchieved = units, salesUnitVariance = units - unitTarget, collectionTarget, collectionAchieved = collection, collectionVariance = collection - collectionTarget } });
         }
 
-        if (User.IsInRole("SubAdmin") || User.IsInRole("CS"))
+        if (User.IsInRole("SubAdmin") || User.IsInRole("BrandAndIT"))
             return Ok(new
             {
-                leads = User.IsInRole("SubAdmin") ? await db.Leads.CountAsync(x => x.CreatedAt >= rangeFrom && x.CreatedAt < endExclusive) : 0,
+                leads = User.IsInRole("BrandAndIT") ? await db.Leads.CountAsync(x => x.CreatedAt >= rangeFrom && x.CreatedAt < endExclusive) : 0,
                 customers = customerIds.Count,
-                projects = User.IsInRole("CS") ? await db.FinancialAgreements.CountAsync(x => x.CreatedAt >= rangeFrom && x.CreatedAt < endExclusive) : 0,
+                projects = 0,
                 collectionFrom = rangeFrom, collectionTo = rangeTo
             });
 
