@@ -12,7 +12,7 @@ namespace backend.Controllers;
 public class DashboardController(CrmDbContext db, IFinancialService financial) : ControllerBase
 {
     [HttpGet("sales-report")]
-    [Authorize(Roles = "SuperAdmin,Admin,Manager")]
+    [Authorize(Roles = "SuperAdmin,Admin,Manager,SalesExecutive")]
     public async Task<ActionResult> GetSalesReport([FromQuery] int salesExecutiveId, [FromQuery] DateTime from, [FromQuery] DateTime to)
     {
         var rangeFrom = from.Date;
@@ -20,7 +20,9 @@ public class DashboardController(CrmDbContext db, IFinancialService financial) :
         if (rangeFrom > rangeTo) return BadRequest(new { message = "Report start date cannot be after the end date." });
         if ((rangeTo - rangeFrom).TotalDays > 3660) return BadRequest(new { message = "Report period cannot exceed ten years." });
 
-        var userId = salesExecutiveId;
+        var userId = User.IsInRole("SalesExecutive") ? User.UserId() : salesExecutiveId;
+        if (User.IsInRole("SalesExecutive") && salesExecutiveId != userId)
+            return Forbid();
         var endExclusive = rangeTo.AddDays(1);
         var profile = await db.Users.Where(x => x.Id == userId && x.Role.Name == "SalesExecutive").Select(x => new { x.FullName, x.Email }).SingleOrDefaultAsync();
         if (profile is null) return NotFound(new { message = "Sales executive not found." });
@@ -30,10 +32,16 @@ public class DashboardController(CrmDbContext db, IFinancialService financial) :
             .Select(x => x.BookedAt!.Value).ToListAsync();
         var payments = await db.Payments.Where(x => x.SalesExecutiveId == userId && x.Status == PaymentStatus.Approved && !x.IsReversed && x.PaymentDate >= rangeFrom && x.PaymentDate < endExclusive)
             .Select(x => new { x.PaymentDate, x.Amount }).ToListAsync();
+        var commissions = await db.Commissions.Where(x => x.SalesExecutiveId == userId && x.Status != CommissionStatus.Rejected && x.CreatedAt >= rangeFrom && x.CreatedAt < endExclusive)
+            .Select(x => new { x.CreatedAt, x.Amount }).ToListAsync();
         var targets = await db.MonthlySalesTargets.Where(x => x.SalesExecutiveId == userId &&
                 x.Month >= DateOnly.FromDateTime(new DateTime(rangeFrom.Year, rangeFrom.Month, 1)) &&
                 x.Month <= DateOnly.FromDateTime(new DateTime(rangeTo.Year, rangeTo.Month, 1)))
             .ToDictionaryAsync(x => x.Month);
+        var filteredLeads = leads.Where(x => x.CreatedAt >= rangeFrom && x.CreatedAt < endExclusive).ToList();
+        var activeFollowUpStatuses = new[] { LeadStatus.Contacted, LeadStatus.Interested, LeadStatus.FollowUpNeeded,
+            LeadStatus.SiteVisitScheduled, LeadStatus.Visited, LeadStatus.Negotiation, LeadStatus.InvoiceGenerated };
+        var returnedLeads = await db.LeadReturns.CountAsync(x => x.SalesExecutiveId == userId && x.ReturnedAt >= rangeFrom && x.ReturnedAt < endExclusive);
 
         var months = new List<object>();
         for (var cursor = new DateTime(rangeFrom.Year, rangeFrom.Month, 1); cursor <= rangeTo; cursor = cursor.AddMonths(1))
@@ -46,15 +54,23 @@ public class DashboardController(CrmDbContext db, IFinancialService financial) :
             var wins = bookings.Count(x => x >= effectiveStart && x < effectiveEnd);
             var lost = monthLeads.Count(x => x.Status == LeadStatus.Lost);
             var collection = payments.Where(x => x.PaymentDate >= effectiveStart && x.PaymentDate < effectiveEnd).Sum(x => x.Amount);
+            var commission = commissions.Where(x => x.CreatedAt >= effectiveStart && x.CreatedAt < effectiveEnd).Sum(x => x.Amount);
             targets.TryGetValue(DateOnly.FromDateTime(cursor), out var target);
             var unitTarget = target?.MinimumSalesUnits ?? 0;
             var collectionTarget = target?.MinimumCollectionAmount ?? 0;
             months.Add(new { month = DateOnly.FromDateTime(cursor), wins, lost, statusCounts, unitTarget, unitsAchieved = wins,
                 unitVariance = wins - unitTarget, collectionTarget, collectionAchieved = collection,
-                collectionVariance = collection - collectionTarget });
+                collectionVariance = collection - collectionTarget, commission });
         }
 
-        return Ok(new { employee = profile, from = rangeFrom, to = rangeTo, generatedAt = DateTime.UtcNow, months });
+        return Ok(new { employee = profile, from = rangeFrom, to = rangeTo, generatedAt = DateTime.UtcNow,
+            assignedLeads = filteredLeads.Count, returnedLeads,
+            assignedStage = filteredLeads.Count(x => x.Status == LeadStatus.Assigned),
+            followingUp = filteredLeads.Count(x => activeFollowUpStatuses.Contains(x.Status)),
+            bookedClients = bookings.Count, lost = filteredLeads.Count(x => x.Status == LeadStatus.Lost),
+            notInterested = filteredLeads.Count(x => x.Status == LeadStatus.NotInterested),
+            totalCollection = payments.Sum(x => x.Amount), collectionCount = payments.Count,
+            totalCommission = commissions.Sum(x => x.Amount), months });
     }
 
     [HttpGet("targets")]
