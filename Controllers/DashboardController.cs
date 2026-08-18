@@ -11,6 +11,52 @@ namespace backend.Controllers;
 [ApiController, Authorize, Route("api/dashboard"), Tags("Dashboard")]
 public class DashboardController(CrmDbContext db, IFinancialService financial) : ControllerBase
 {
+    [HttpGet("sales-report")]
+    [Authorize(Roles = "SuperAdmin,Admin,Manager")]
+    public async Task<ActionResult> GetSalesReport([FromQuery] int salesExecutiveId, [FromQuery] DateTime from, [FromQuery] DateTime to)
+    {
+        var rangeFrom = from.Date;
+        var rangeTo = to.Date;
+        if (rangeFrom > rangeTo) return BadRequest(new { message = "Report start date cannot be after the end date." });
+        if ((rangeTo - rangeFrom).TotalDays > 3660) return BadRequest(new { message = "Report period cannot exceed ten years." });
+
+        var userId = salesExecutiveId;
+        var endExclusive = rangeTo.AddDays(1);
+        var profile = await db.Users.Where(x => x.Id == userId && x.Role.Name == "SalesExecutive").Select(x => new { x.FullName, x.Email }).SingleOrDefaultAsync();
+        if (profile is null) return NotFound(new { message = "Sales executive not found." });
+        var leads = await db.Leads.Where(x => x.AssignedToId == userId && x.CreatedAt < endExclusive)
+            .Select(x => new { x.Status, x.CreatedAt }).ToListAsync();
+        var bookings = await db.Customers.Where(x => x.BookedById == userId && x.BookedAt >= rangeFrom && x.BookedAt < endExclusive)
+            .Select(x => x.BookedAt!.Value).ToListAsync();
+        var payments = await db.Payments.Where(x => x.SalesExecutiveId == userId && x.Status == PaymentStatus.Approved && !x.IsReversed && x.PaymentDate >= rangeFrom && x.PaymentDate < endExclusive)
+            .Select(x => new { x.PaymentDate, x.Amount }).ToListAsync();
+        var targets = await db.MonthlySalesTargets.Where(x => x.SalesExecutiveId == userId &&
+                x.Month >= DateOnly.FromDateTime(new DateTime(rangeFrom.Year, rangeFrom.Month, 1)) &&
+                x.Month <= DateOnly.FromDateTime(new DateTime(rangeTo.Year, rangeTo.Month, 1)))
+            .ToDictionaryAsync(x => x.Month);
+
+        var months = new List<object>();
+        for (var cursor = new DateTime(rangeFrom.Year, rangeFrom.Month, 1); cursor <= rangeTo; cursor = cursor.AddMonths(1))
+        {
+            var monthEnd = cursor.AddMonths(1);
+            var effectiveStart = cursor < rangeFrom ? rangeFrom : cursor;
+            var effectiveEnd = monthEnd > endExclusive ? endExclusive : monthEnd;
+            var monthLeads = leads.Where(x => x.CreatedAt >= effectiveStart && x.CreatedAt < effectiveEnd).ToList();
+            var statusCounts = Enum.GetValues<LeadStatus>().ToDictionary(status => status.ToString(), status => monthLeads.Count(x => x.Status == status));
+            var wins = bookings.Count(x => x >= effectiveStart && x < effectiveEnd);
+            var lost = monthLeads.Count(x => x.Status == LeadStatus.Lost);
+            var collection = payments.Where(x => x.PaymentDate >= effectiveStart && x.PaymentDate < effectiveEnd).Sum(x => x.Amount);
+            targets.TryGetValue(DateOnly.FromDateTime(cursor), out var target);
+            var unitTarget = target?.MinimumSalesUnits ?? 0;
+            var collectionTarget = target?.MinimumCollectionAmount ?? 0;
+            months.Add(new { month = DateOnly.FromDateTime(cursor), wins, lost, statusCounts, unitTarget, unitsAchieved = wins,
+                unitVariance = wins - unitTarget, collectionTarget, collectionAchieved = collection,
+                collectionVariance = collection - collectionTarget });
+        }
+
+        return Ok(new { employee = profile, from = rangeFrom, to = rangeTo, generatedAt = DateTime.UtcNow, months });
+    }
+
     [HttpGet("targets")]
     [Authorize(Roles = "SalesExecutive")]
     public async Task<ActionResult> GetTargetHistory()
