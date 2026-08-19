@@ -17,7 +17,7 @@ public class UsersController(CrmDbContext db) : ControllerBase
 {
     private static readonly string[] AdminAccountRoles = ["SubAdmin", "CA", "Transportation", "BrandAndIT"];
     [HttpGet]
-    [Authorize(Roles = "SuperAdmin")]
+    [backend.Security.RequirePermission(PermissionCodes.UsersManage)]
     public async Task<ActionResult<List<UserSummaryDto>>> GetUsers()
     {
         var users = await db.Users.Include(x => x.Role)
@@ -40,7 +40,7 @@ public class UsersController(CrmDbContext db) : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "SuperAdmin")]
+    [backend.Security.RequirePermission(PermissionCodes.UsersManage)]
     public async Task<ActionResult> CreateUser(CreateUserRequest request)
     {
         if (!AdminAccountRoles.Contains(request.Role)) return BadRequest(new { message = "Choose Sub Admin, CA, Transportation, or Brand & IT." });
@@ -48,7 +48,7 @@ public class UsersController(CrmDbContext db) : ControllerBase
     }
 
     [HttpGet("admin-accounts")]
-    [Authorize(Roles = "SuperAdmin")]
+    [backend.Security.RequirePermission(PermissionCodes.UsersManage)]
     public async Task<ActionResult> GetAdminAccounts() => Ok(await db.Users.Include(x => x.Role)
         .Where(x => AdminAccountRoles.Contains(x.Role.Name))
         .OrderBy(x => x.Role.Name).ThenBy(x => x.FullName)
@@ -56,7 +56,7 @@ public class UsersController(CrmDbContext db) : ControllerBase
         .ToListAsync());
 
     [HttpPost("sales-executives")]
-    [Authorize(Roles = "SuperAdmin")]
+    [backend.Security.RequirePermission(PermissionCodes.UsersManage)]
     public async Task<ActionResult> CreateSalesExecutive(CreateSalesExecutiveRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Designation)) return BadRequest(new { message = "Designation is required." });
@@ -122,7 +122,7 @@ public class UsersController(CrmDbContext db) : ControllerBase
     }
 
     [HttpPut("sales-executives/{id:int}")]
-    [Authorize(Roles = "SuperAdmin")]
+    [backend.Security.RequirePermission(PermissionCodes.UsersManage)]
     public async Task<ActionResult> UpdateSalesExecutive(int id, UpdateSalesExecutiveRequest request)
     {
         var user = await db.Users.Include(x => x.Role)
@@ -203,7 +203,7 @@ public class UsersController(CrmDbContext db) : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = "SuperAdmin")]
+    [backend.Security.RequirePermission(PermissionCodes.UsersManage)]
     public async Task<ActionResult> UpdateUser(int id, UpdateAdminUserRequest request)
     {
         if (!AdminAccountRoles.Contains(request.Role)) return BadRequest(new { message = "Choose Sub Admin, CA, Transportation, or Brand & IT." });

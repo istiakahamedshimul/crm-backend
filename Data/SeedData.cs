@@ -47,20 +47,17 @@ public static class SeedData
                 if (!db.Permissions.Any(x => x.Code == code)) db.Permissions.Add(new Permission { Code = code, Name = code.Replace('.', ' '), PermissionGroup = group });
         }
         db.SaveChanges();
-        var fixedRoleNames = new[] { "SubAdmin", "CA", "Transportation", "BrandAndIT" };
-        var fixedRoleIds = db.Roles.Where(x => fixedRoleNames.Contains(x.Name)).Select(x => x.Id).ToArray();
-        db.RolePermissions.RemoveRange(db.RolePermissions.Where(x => fixedRoleIds.Contains(x.RoleId)));
-        db.UserPermissions.RemoveRange(db.UserPermissions.Where(x => fixedRoleIds.Contains(x.User.RoleId)));
-        db.SaveChanges();
-        void Grant(string roleName, params string[] codes) {
-            var role = db.Roles.First(x => x.Name == roleName); foreach (var permission in db.Permissions.Where(x => codes.Contains(x.Code)).ToList())
-                if (!db.RolePermissions.Any(x => x.RoleId == role.Id && x.PermissionId == permission.Id)) db.RolePermissions.Add(new RolePermission { RoleId = role.Id, PermissionId = permission.Id });
+        void GrantDefaults(string roleName, params string[] codes) {
+            var role = db.Roles.First(x => x.Name == roleName);
+            if (db.RolePermissions.Any(x => x.RoleId == role.Id)) return;
+            foreach (var permission in db.Permissions.Where(x => codes.Contains(x.Code)).ToList())
+                db.RolePermissions.Add(new RolePermission { RoleId = role.Id, PermissionId = permission.Id });
         }
-        Grant("CA", PermissionCodes.CustomersView, PermissionCodes.AgreementsManage, PermissionCodes.EmiManage, PermissionCodes.PaymentsView, PermissionCodes.PaymentsRecord, PermissionCodes.PaymentsApprove, PermissionCodes.PaymentsReverse, PermissionCodes.ReportsView);
-        Grant("Transportation", PermissionCodes.TransportationManage, PermissionCodes.CustomersView);
-        Grant("SubAdmin", PermissionCodes.CustomersView, PermissionCodes.ReportsView);
-        Grant("BrandAndIT", PermissionCodes.LeadsManage, PermissionCodes.BookingsManage, PermissionCodes.CustomersView, PermissionCodes.NotificationsManage, PermissionCodes.ReportsView);
-        Grant("SalesExecutive", PermissionCodes.CustomersView);
+        GrantDefaults("CA", PermissionCodes.CustomersView, PermissionCodes.AgreementsManage, PermissionCodes.EmiManage, PermissionCodes.PaymentsView, PermissionCodes.PaymentsRecord, PermissionCodes.PaymentsApprove, PermissionCodes.PaymentsReverse, PermissionCodes.ReportsView);
+        GrantDefaults("Transportation", PermissionCodes.TransportationManage, PermissionCodes.CustomersView);
+        GrantDefaults("SubAdmin", PermissionCodes.CustomersView, PermissionCodes.ReportsView);
+        GrantDefaults("BrandAndIT", PermissionCodes.LeadsManage, PermissionCodes.BookingsManage, PermissionCodes.CustomersView, PermissionCodes.NotificationsManage, PermissionCodes.ReportsView);
+        GrantDefaults("SalesExecutive", PermissionCodes.CustomersView);
         db.SaveChanges();
 
         // Repair legacy Booked leads that predate automatic conversion. This is
