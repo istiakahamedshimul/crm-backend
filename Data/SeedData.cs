@@ -53,7 +53,7 @@ public static class SeedData
         db.UserPermissions.RemoveRange(db.UserPermissions.Where(x => fixedRoleIds.Contains(x.User.RoleId)));
         db.SaveChanges();
         void Grant(string roleName, params string[] codes) {
-            var role = db.Roles.First(x => x.Name == roleName); foreach (var permission in db.Permissions.Where(x => codes.Contains(x.Code)))
+            var role = db.Roles.First(x => x.Name == roleName); foreach (var permission in db.Permissions.Where(x => codes.Contains(x.Code)).ToList())
                 if (!db.RolePermissions.Any(x => x.RoleId == role.Id && x.PermissionId == permission.Id)) db.RolePermissions.Add(new RolePermission { RoleId = role.Id, PermissionId = permission.Id });
         }
         Grant("CA", PermissionCodes.CustomersView, PermissionCodes.AgreementsManage, PermissionCodes.EmiManage, PermissionCodes.PaymentsView, PermissionCodes.PaymentsRecord, PermissionCodes.PaymentsApprove, PermissionCodes.PaymentsReverse, PermissionCodes.ReportsView);
