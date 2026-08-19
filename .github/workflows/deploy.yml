@@ -47,7 +47,7 @@ jobs:
         shell: bash
         run: |
           set -e
-          dotnet restore "${{ steps.find_project.outputs.project_file }}"
+          dotnet restore "${{ steps.find_project.outputs.project_file }}" --runtime linux-x64
 
       - name: Install EF Core CLI
         shell: bash
@@ -72,6 +72,8 @@ jobs:
           dotnet publish "$PROJECT_FILE" \
             --configuration Release \
             --output ./publish \
+            --runtime linux-x64 \
+            --self-contained true \
             --no-restore
 
           echo "Creating production migration bundle..."
@@ -96,6 +98,13 @@ jobs:
             echo "Missing ${PROJECT_NAME}.dll"
             exit 1
           }
+
+          test -f "./publish/${PROJECT_NAME}" || {
+            echo "Missing self-contained ${PROJECT_NAME} executable"
+            exit 1
+          }
+
+          chmod +x "./publish/${PROJECT_NAME}"
 
           test -f "./publish/${PROJECT_NAME}.runtimeconfig.json" || {
             echo "Missing ${PROJECT_NAME}.runtimeconfig.json"
@@ -246,7 +255,7 @@ jobs:
             [Service]
             Type=simple
             WorkingDirectory=$BACKEND_DIRECTORY
-            ExecStart=/usr/bin/dotnet $BACKEND_DIRECTORY/${PROJECT_NAME}.dll
+            ExecStart=$BACKEND_DIRECTORY/${PROJECT_NAME}
 
             User=www-data
             Group=www-data
@@ -352,6 +361,7 @@ jobs:
             run_sudo chown -R www-data:www-data "$BACKEND_DIRECTORY"
             run_sudo find "$BACKEND_DIRECTORY" -type d -exec chmod 755 {} \;
             run_sudo find "$BACKEND_DIRECTORY" -type f -exec chmod 644 {} \;
+            run_sudo chmod 755 "$BACKEND_DIRECTORY/${PROJECT_NAME}"
             run_sudo chmod 755 "$BACKEND_DIRECTORY/efbundle"
 
             echo "Applying pending database migrations..."
