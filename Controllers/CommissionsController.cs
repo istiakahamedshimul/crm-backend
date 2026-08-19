@@ -42,7 +42,7 @@ public class CommissionsController(CrmDbContext db) : ControllerBase
     }
 
     [HttpGet]
-    [Authorize(Roles = "SuperAdmin,Admin,Accountant,Manager")]
+    [backend.Security.RequirePermission(PermissionCodes.PaymentsView)]
     public async Task<ActionResult> GetCommissions()
     {
         var commissions = await db.Commissions.Include(x => x.SalesExecutive).OrderByDescending(x => x.CreatedAt)
@@ -63,7 +63,7 @@ public class CommissionsController(CrmDbContext db) : ControllerBase
     }
 
     [HttpPost("/api/commission-rules")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [backend.Security.RequirePermission(PermissionCodes.PaymentsApprove)]
     public async Task<ActionResult> CreateRule(CommissionRuleRequest request)
     {
         foreach (var rule in db.CommissionRules) rule.IsActive = false;

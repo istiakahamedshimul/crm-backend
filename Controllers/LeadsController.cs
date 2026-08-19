@@ -34,7 +34,7 @@ public class LeadsController(
     }
 
     [HttpPost("import")]
-    [Authorize(Roles = "SuperAdmin,BrandAndIT")]
+    [backend.Security.RequirePermission(PermissionCodes.LeadsManage)]
     [RequestSizeLimit(10_000_000)]
     public async Task<ActionResult> Import(IFormFile file, [FromForm] bool autoAssign = false)
     {
@@ -148,7 +148,7 @@ public class LeadsController(
     }
 
     [HttpGet("returned")]
-    [Authorize(Roles = "SuperAdmin,BrandAndIT")]
+    [backend.Security.RequirePermission(PermissionCodes.LeadsManage)]
     public async Task<ActionResult> GetReturnedLeads()
     {
         var history = await db.LeadReturns
@@ -173,7 +173,7 @@ public class LeadsController(
     }
 
     [HttpPost]
-    [Authorize(Roles = "SuperAdmin,BrandAndIT")]
+    [backend.Security.RequirePermission(PermissionCodes.LeadsManage)]
     public async Task<ActionResult> CreateLead(CreateLeadRequest request)
     {
         if (!request.AssignedToId.HasValue)

@@ -1,6 +1,6 @@
 using backend.Data; using backend.Models; using backend.Services; using Microsoft.AspNetCore.Authorization; using Microsoft.AspNetCore.Mvc; using Microsoft.EntityFrameworkCore;
 namespace backend.Controllers;
-[ApiController, Authorize(Roles="SuperAdmin"), Route("api/access-control"), Tags("Access Control")]
+[ApiController, Authorize, backend.Security.RequirePermission(PermissionCodes.PermissionsManage), Route("api/access-control"), Tags("Access Control")]
 public class AccessControlController(CrmDbContext db) : ControllerBase
 {
     [HttpGet] public async Task<ActionResult> Get() => Ok(new {

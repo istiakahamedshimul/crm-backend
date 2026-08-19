@@ -34,7 +34,7 @@ public class ProjectsController(CrmDbContext db) : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [backend.Security.RequirePermission(PermissionCodes.BookingsManage)]
     public async Task<ActionResult> CreateProject(CreateProjectRequest request)
     {
         if (!await db.SubGroups.AnyAsync(x => x.Id == request.SubGroupId))

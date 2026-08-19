@@ -20,7 +20,7 @@ public class SubGroupsController(CrmDbContext db) : ControllerBase
         .ToListAsync());
 
     [HttpPost]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [backend.Security.RequirePermission(PermissionCodes.BookingsManage)]
     public async Task<ActionResult> CreateSubGroup(CreateSubGroupRequest request)
     {
         var name = request.Name.Trim();
