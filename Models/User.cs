@@ -11,6 +11,8 @@ public class User
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? LastLoginAt { get; set; }
+    public bool LocationTrackingEnabled { get; set; } = true;
+    public DateTime? LocationTrackingChangedAtUtc { get; set; }
     public int RoleId { get; set; }
     public Role Role { get; set; } = null!;
     public List<UserPermission> UserPermissions { get; set; } = [];
