@@ -21,6 +21,9 @@ public class LocationsController(CrmDbContext db) : ControllerBase
         if (request.Points.Count is < 1 or > 500)
             return BadRequest(new { message = "Send between 1 and 500 location points." });
 
+        var userId = User.UserId();
+        if (!await db.Users.AnyAsync(x => x.Id == userId && x.LocationTrackingEnabled))
+            return Conflict(new { message = "Location tracking is turned off in the sales app." });
         var now = DateTime.UtcNow;
         var lowerBound = now.AddDays(-7);
         var upperBound = now.AddMinutes(10);
@@ -31,7 +34,6 @@ public class LocationsController(CrmDbContext db) : ControllerBase
             .ToList();
         if (valid.Count == 0) return BadRequest(new { message = "No valid location points were supplied." });
 
-        var userId = User.UserId();
         var times = valid.Select(x => x.RecordedAtUtc).ToList();
         var existing = await db.EmployeeLocations
             .Where(x => x.UserId == userId && times.Contains(x.RecordedAtUtc))
@@ -49,13 +51,37 @@ public class LocationsController(CrmDbContext db) : ControllerBase
         return Ok(new { accepted = rows.Count });
     }
 
+    [HttpGet("tracking-status")]
+    [Authorize(Roles = "SalesExecutive")]
+    public async Task<ActionResult> TrackingStatus()
+    {
+        var state = await db.Users.Where(x => x.Id == User.UserId())
+            .Select(x => new { enabled = x.LocationTrackingEnabled, changedAtUtc = x.LocationTrackingChangedAtUtc })
+            .SingleAsync();
+        return Ok(state);
+    }
+
+    [HttpPut("tracking-status")]
+    [Authorize(Roles = "SalesExecutive")]
+    public async Task<ActionResult> SetTrackingStatus(TrackingStatusRequest request)
+    {
+        var user = await db.Users.SingleAsync(x => x.Id == User.UserId());
+        if (user.LocationTrackingEnabled != request.Enabled || user.LocationTrackingChangedAtUtc is null)
+        {
+            user.LocationTrackingEnabled = request.Enabled;
+            user.LocationTrackingChangedAtUtc = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+        }
+        return Ok(new { enabled = user.LocationTrackingEnabled, changedAtUtc = user.LocationTrackingChangedAtUtc });
+    }
+
     [HttpGet("live")]
     [backend.Security.RequirePermission(PermissionCodes.LeadsManage)]
     public async Task<ActionResult> Live()
     {
         var employees = await db.Users
             .Where(x => x.IsActive && x.Role.Name == "SalesExecutive")
-            .Select(x => new { x.Id, x.FullName, x.Phone })
+            .Select(x => new { x.Id, x.FullName, x.Phone, x.LocationTrackingEnabled, x.LocationTrackingChangedAtUtc })
             .OrderBy(x => x.FullName)
             .ToListAsync();
         var employeeIds = employees.Select(x => x.Id).ToList();
@@ -71,13 +97,15 @@ public class LocationsController(CrmDbContext db) : ControllerBase
             return new
             {
                 employeeId = employee.Id, employee.FullName, employee.Phone,
+                trackingEnabled = employee.LocationTrackingEnabled,
+                trackingChangedAtUtc = employee.LocationTrackingChangedAtUtc,
                 latitude = location?.Latitude, longitude = location?.Longitude,
                 accuracyMeters = location?.AccuracyMeters,
                 speedMetersPerSecond = location?.SpeedMetersPerSecond,
                 isMocked = location?.IsMocked ?? false,
                 recordedAtUtc = location?.RecordedAtUtc,
                 hasLocation = location is not null,
-                isOnline = location?.RecordedAtUtc >= now.AddMinutes(-5)
+                isOnline = employee.LocationTrackingEnabled && location?.RecordedAtUtc >= now.AddMinutes(-5)
             };
         }));
     }
@@ -117,4 +145,6 @@ public class LocationsController(CrmDbContext db) : ControllerBase
         var h = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) + Math.Cos(a.Latitude * Math.PI / 180) * Math.Cos(b.Latitude * Math.PI / 180) * Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
         return radius * 2 * Math.Atan2(Math.Sqrt(h), Math.Sqrt(1 - h));
     }
+
+    public record TrackingStatusRequest(bool Enabled);
 }

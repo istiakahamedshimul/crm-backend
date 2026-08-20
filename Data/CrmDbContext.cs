@@ -34,6 +34,7 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options) : DbContext(op
     {
         modelBuilder.Entity<Role>().HasIndex(x => x.Name).IsUnique();
         modelBuilder.Entity<User>().HasIndex(x => x.Email).IsUnique();
+        modelBuilder.Entity<User>().Property(x => x.LocationTrackingEnabled).HasDefaultValue(true);
         modelBuilder.Entity<Customer>().HasIndex(x => x.LeadId).IsUnique();
         modelBuilder.Entity<Invoice>().HasIndex(x => x.InvoiceNumber).IsUnique();
         modelBuilder.Entity<Payment>().HasIndex(x => x.CollectionNumber).IsUnique();
