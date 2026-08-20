@@ -74,7 +74,7 @@ public class CustomersController(CrmDbContext db, ILeadAssignmentService assignm
                 (lead.Phone == customer.Phone ||
                  (customer.Email != null && lead.Email != null && lead.Email.ToLower() == customer.Email.ToLower()))))
             .OrderBy(x => x.Name)
-            .Select(x => new { x.Id, x.Name, x.Phone, x.AlternativePhone, x.Email, x.Address, x.ProjectId })
+            .Select(x => new { x.Id, x.Name, x.Phone, x.AlternativePhone, x.Email, x.Address, x.ProjectId, x.AssignedToId, AssignedToName = x.AssignedTo == null ? null : x.AssignedTo.FullName })
             .ToListAsync();
 
         return Ok(customers);

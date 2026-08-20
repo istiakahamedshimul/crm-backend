@@ -103,7 +103,7 @@ public class LeadsController(
                 BudgetRange = NullIfBlank(row.GetValueOrDefault("BudgetRange")),
                 PreferredLocation = NullIfBlank(row.GetValueOrDefault("PreferredLocation")),
                 Remarks = NullIfBlank(row.GetValueOrDefault("Remarks")),
-                Source = LeadSource.Other, Priority = LeadPriority.Warm,
+                Source = LeadSource.Company, Priority = LeadPriority.Warm,
                 Status = assignedId.HasValue ? LeadStatus.Assigned : LeadStatus.New,
                 AssignedToId = assignedId, AssignedAt = assignedId.HasValue ? DateTime.UtcNow : null, CreatedById = User.UserId()
             };
@@ -141,7 +141,7 @@ public class LeadsController(
             query = query.Where(x => x.Project != null && x.Project.Type == projectType);
 
         var leads = await query.OrderByDescending(x => x.CreatedAt)
-            .Select(x => new LeadDto(x.Id, x.CustomerName, x.Phone, x.AlternativePhone, x.Email, x.Address, x.BudgetRange, x.PreferredLocation, x.Source, x.Status, x.AssignedToId, x.AssignedTo == null ? null : x.AssignedTo.FullName, x.ProjectId, x.Project == null ? null : x.Project.Name, x.Project == null ? null : x.Project.Type, x.NextFollowUpAt, x.Remarks, x.AssignedAt, x.CreatedAt))
+            .Select(x => new LeadDto(x.Id, x.CustomerName, x.Phone, x.AlternativePhone, x.Email, x.Address, x.BudgetRange, x.PreferredLocation, x.Source, x.ReferrerName, x.ReferrerPhone, x.ReferrerEmail, x.PreviousCustomerId, x.Status, x.AssignedToId, x.AssignedTo == null ? null : x.AssignedTo.FullName, x.ProjectId, x.Project == null ? null : x.Project.Name, x.Project == null ? null : x.Project.Type, x.NextFollowUpAt, x.Remarks, x.AssignedAt, x.CreatedAt))
             .ToListAsync();
 
         return Ok(leads);
@@ -176,12 +176,19 @@ public class LeadsController(
     [backend.Security.RequirePermission(PermissionCodes.LeadsManage)]
     public async Task<ActionResult> CreateLead(CreateLeadRequest request)
     {
-        if (!request.AssignedToId.HasValue)
+        Customer? customer = null;
+        if (request.CustomerId.HasValue)
+        {
+            customer = await db.Customers.FindAsync(request.CustomerId.Value);
+            if (customer is null) return BadRequest(new { message = "Selected customer was not found." });
+        }
+        var assignedToId = request.AssignedToId ?? customer?.AssignedToId;
+        if (!assignedToId.HasValue)
         {
             return BadRequest(new { message = "Lead must be assigned to a sales executive by admin." });
         }
 
-        var salesExecutive = await assignmentService.GetActiveSalesExecutiveAsync(request.AssignedToId.Value);
+        var salesExecutive = await assignmentService.GetActiveSalesExecutiveAsync(assignedToId.Value);
         if (salesExecutive is null)
         {
             return BadRequest(new { message = "Assigned user must be an active sales executive." });
@@ -192,15 +199,11 @@ public class LeadsController(
             return BadRequest(new { message = "Selected project was not found." });
         }
 
-        Customer? customer = null;
         if (request.CustomerId.HasValue)
         {
-            customer = await db.Customers.FindAsync(request.CustomerId.Value);
-            if (customer is null) return BadRequest(new { message = "Selected customer was not found." });
-
             var hasActiveAssignment = await db.Leads.AnyAsync(lead =>
                 lead.Status != LeadStatus.Booked &&
-                (lead.Phone == customer.Phone ||
+                (lead.Phone == customer!.Phone ||
                  (customer.Email != null && lead.Email != null && lead.Email.ToLower() == customer.Email.ToLower())));
             if (hasActiveAssignment)
                 return Conflict(new { message = "This customer is already assigned. They can be assigned again after the current lead is Booked." });
@@ -212,8 +215,8 @@ public class LeadsController(
         var email = customer?.Email ?? request.Email;
         var address = customer?.Address ?? request.Address;
 
-        var conflict = await assignmentService.GetAssignmentConflictAsync(
-            phone, email, request.AssignedToId.Value, ignoreCustomerId: customer?.Id);
+        var conflict = customer is null ? await assignmentService.GetAssignmentConflictAsync(
+            phone, email, assignedToId.Value) : null;
         if (conflict is not null)
         {
             return Conflict(new { message = conflict });
@@ -229,9 +232,13 @@ public class LeadsController(
             BudgetRange = request.BudgetRange,
             PreferredLocation = request.PreferredLocation,
             ProjectId = request.ProjectId,
-            Source = request.Source,
+            Source = LeadSource.Company,
+            ReferrerName = NullIfBlank(request.ReferrerName),
+            ReferrerPhone = NullIfBlank(request.ReferrerPhone),
+            ReferrerEmail = NullIfBlank(request.ReferrerEmail),
+            PreviousCustomerId = customer?.Id,
             Status = LeadStatus.Assigned,
-            AssignedToId = request.AssignedToId,
+            AssignedToId = assignedToId,
             AssignedAt = DateTime.UtcNow,
             CreatedById = User.UserId(),
             Remarks = request.Remarks
@@ -240,8 +247,23 @@ public class LeadsController(
         db.Leads.Add(lead);
         await db.SaveChangesAsync();
         await notificationService.SendLeadAssignedAsync(
-            request.AssignedToId.Value, lead.Id, lead.CustomerName, HttpContext.RequestAborted);
+            assignedToId.Value, lead.Id, lead.CustomerName, HttpContext.RequestAborted);
         return Created($"/api/leads/{lead.Id}", new { lead.Id });
+    }
+
+    [HttpPost("mine")]
+    [Authorize(Roles = "SalesExecutive")]
+    public async Task<ActionResult> CreateMyLead(CreateMyLeadRequest request)
+    {
+        if (request.Source is not (LeadSource.Self or LeadSource.Referral)) return BadRequest(new { message = "Choose Self or Referral as the lead source." });
+        if (string.IsNullOrWhiteSpace(request.CustomerName) || string.IsNullOrWhiteSpace(request.Phone)) return BadRequest(new { message = "Lead name and phone are required." });
+        if (request.Source == LeadSource.Referral && (string.IsNullOrWhiteSpace(request.ReferrerName) || string.IsNullOrWhiteSpace(request.ReferrerPhone))) return BadRequest(new { message = "Referrer name and phone are required." });
+        if (request.ProjectId.HasValue && !await db.Projects.AnyAsync(x => x.Id == request.ProjectId.Value)) return BadRequest(new { message = "Selected project was not found." });
+        var userId = User.UserId();
+        var phone = request.Phone.Trim(); var email = NullIfBlank(request.Email);
+        if (await db.Leads.AnyAsync(x => x.Status != LeadStatus.Booked && (x.Phone == phone || (email != null && x.Email != null && x.Email.ToLower() == email.ToLower())))) return Conflict(new { message = "This person already has an active lead." });
+        var lead = new Lead { CustomerName=request.CustomerName.Trim(),Phone=phone,AlternativePhone=NullIfBlank(request.AlternativePhone),Email=email,Address=NullIfBlank(request.Address),BudgetRange=NullIfBlank(request.BudgetRange),PreferredLocation=NullIfBlank(request.PreferredLocation),ProjectId=request.ProjectId,Source=request.Source,ReferrerName=request.Source==LeadSource.Referral?request.ReferrerName!.Trim():null,ReferrerPhone=request.Source==LeadSource.Referral?request.ReferrerPhone!.Trim():null,ReferrerEmail=request.Source==LeadSource.Referral?NullIfBlank(request.ReferrerEmail):null,Status=LeadStatus.Assigned,AssignedToId=userId,AssignedAt=DateTime.UtcNow,CreatedById=userId,Remarks=NullIfBlank(request.Remarks)};
+        db.Leads.Add(lead); await db.SaveChangesAsync(); return Created($"/api/leads/{lead.Id}",new{lead.Id});
     }
 
     [HttpPut("{id:int}")]
@@ -274,6 +296,10 @@ public class LeadsController(
             lead.Address = string.IsNullOrWhiteSpace(request.Address) ? null : request.Address.Trim();
             lead.BudgetRange = string.IsNullOrWhiteSpace(request.BudgetRange) ? null : request.BudgetRange.Trim();
             lead.PreferredLocation = string.IsNullOrWhiteSpace(request.PreferredLocation) ? null : request.PreferredLocation.Trim();
+            if (request.Source.HasValue) lead.Source = request.Source.Value;
+            lead.ReferrerName = string.IsNullOrWhiteSpace(request.ReferrerName) ? null : request.ReferrerName.Trim();
+            lead.ReferrerPhone = string.IsNullOrWhiteSpace(request.ReferrerPhone) ? null : request.ReferrerPhone.Trim();
+            lead.ReferrerEmail = string.IsNullOrWhiteSpace(request.ReferrerEmail) ? null : request.ReferrerEmail.Trim();
         }
         if (request.AssignedToId.HasValue)
         {
