@@ -30,6 +30,7 @@ public class FollowUpsController(CrmDbContext db) : ControllerBase
                 Lead = x.Lead.CustomerName,
                 SalesExecutive = x.CreatedBy.FullName,
                 x.Type,
+                x.ResultingStatus,
                 x.Summary,
                 x.NextFollowUpAt,
                 x.CreatedAt,
@@ -63,6 +64,7 @@ public class FollowUpsController(CrmDbContext db) : ControllerBase
             LeadId = request.LeadId,
             CustomerId = request.CustomerId,
             Type = request.Type,
+            ResultingStatus = request.NewLeadStatus ?? lead.Status,
             Summary = request.Summary,
             NextFollowUpAt = request.NextFollowUpAt,
             CreatedById = User.UserId()

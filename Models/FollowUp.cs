@@ -8,6 +8,7 @@ public class FollowUp
     public int? CustomerId { get; set; }
     public Customer? Customer { get; set; }
     public FollowUpType Type { get; set; }
+    public LeadStatus? ResultingStatus { get; set; }
     public string Summary { get; set; } = "";
     public DateTime? NextFollowUpAt { get; set; }
     public int CreatedById { get; set; }
