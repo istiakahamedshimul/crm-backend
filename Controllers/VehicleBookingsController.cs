@@ -49,6 +49,8 @@ public class VehicleBookingsController(CrmDbContext db) : ControllerBase
                 x.DriverPhone,
                 x.Status,
                 x.AdminRemarks,
+                x.CancellationReason,
+                x.CancelledAt,
                 x.CreatedAt
             }).ToListAsync());
     }
@@ -132,6 +134,24 @@ public class VehicleBookingsController(CrmDbContext db) : ControllerBase
     [backend.Security.RequirePermission(PermissionCodes.TransportationManage)]
     public Task<ActionResult> Reject(int id, ReviewVehicleBookingRequest request) =>
         Review(id, VehicleBookingStatus.Rejected, request);
+
+    [HttpPost("{id:int}/cancel")]
+    [Authorize(Roles = "SalesExecutive")]
+    public async Task<ActionResult> Cancel(int id, CancelVehicleBookingRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Reason)) return BadRequest(new { message = "Cancellation reason is required." });
+        var booking = await db.VehicleBookings.SingleOrDefaultAsync(x => x.Id == id && x.SalesExecutiveId == User.UserId());
+        if (booking is null) return NotFound(new { message = "Visit request not found." });
+        if (booking.Status is not (VehicleBookingStatus.Pending or VehicleBookingStatus.Approved)) return Conflict(new { message = "Only pending or approved visits can be cancelled." });
+        var offset = booking.TimezoneOffsetMinutes == 0 ? 360 : booking.TimezoneOffsetMinutes;
+        var localToday = DateOnly.FromDateTime(DateTime.UtcNow.AddMinutes(offset));
+        if (localToday > booking.VisitDate) return Conflict(new { message = "This visit date has passed and can no longer be cancelled." });
+        booking.Status = VehicleBookingStatus.Cancelled;
+        booking.CancellationReason = request.Reason.Trim();
+        booking.CancelledAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        return Ok(new { message = "Visit cancelled." });
+    }
 
     private async Task<ActionResult> Review(int id, VehicleBookingStatus status, ReviewVehicleBookingRequest request)
     {

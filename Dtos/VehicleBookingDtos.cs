@@ -13,6 +13,7 @@ public record CreateVehicleBookingRequest(
     int TimezoneOffsetMinutes);
 
 public record ReviewVehicleBookingRequest(int? VehicleId, string? Driver, string? DriverPhone, string? Remarks);
+public record CancelVehicleBookingRequest(string Reason);
 
 public record CreateAdminVehicleBookingRequest(int? CustomerId, int? LeadId, int ProjectId, DateOnly VisitDate,
     TimeOnly VisitTime, int PersonCount, string PickupPlace, string Purpose,
