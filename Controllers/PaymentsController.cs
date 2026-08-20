@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Authorization; using Microsoft.AspNetCore.Mvc; using 
 namespace backend.Controllers;
 
 [ApiController, Authorize, Route("api/payments"), Tags("Payments")]
-public class PaymentsController(CrmDbContext db, IFinancialService financial) : ControllerBase
+public class PaymentsController(CrmDbContext db, IFinancialService financial, IOneSignalNotificationService push) : ControllerBase
 {
     [HttpGet, RequirePermission(PermissionCodes.PaymentsView)]
     public async Task<ActionResult> Get([FromQuery]int page=1,[FromQuery]int pageSize=50,[FromQuery]int? customerId=null,[FromQuery]int? salesExecutiveId=null,[FromQuery]PaymentStatus? status=null)
@@ -43,7 +43,8 @@ public class PaymentsController(CrmDbContext db, IFinancialService financial) : 
         try
         {
             await db.SaveChangesAsync(); await financial.RecalculateInstallmentsAsync(customer.FinancialAgreement.Id); var after=await financial.SummaryAsync(request.CustomerId);
-            AddBalanceNotification(customer,after,$"balance:payment:{payment.Id}"); await db.SaveChangesAsync(); await transaction.CommitAsync();
+            var (notificationTitle, notificationMessage) = AddPaymentNotification(customer,payment,after); await db.SaveChangesAsync(); await transaction.CommitAsync();
+            await push.SendFinancialPushAsync(customer.AssignedToId.Value,customer.Id,notificationTitle,notificationMessage,HttpContext.RequestAborted);
             return Created($"/api/payments/{payment.Id}",new{payment.Id,summary=after});
         }
         catch(DbUpdateException){await transaction.RollbackAsync();return Conflict(new{message="Duplicate or concurrent payment submission detected."});}
@@ -59,12 +60,19 @@ public class PaymentsController(CrmDbContext db, IFinancialService financial) : 
     }
 
     [HttpPost("{id:int}/approve"),RequirePermission(PermissionCodes.PaymentsApprove)]
-    public async Task<ActionResult> Approve(int id){var payment=await db.Payments.Include(x=>x.Customer).ThenInclude(x=>x.FinancialAgreement).SingleOrDefaultAsync(x=>x.Id==id);if(payment is null)return NotFound();if(payment.Status==PaymentStatus.Approved)return Ok(new{message="Already approved."});if(payment.Status==PaymentStatus.Rejected||payment.IsReversed)return Conflict(new{message="Rejected or reversed payment cannot be approved."});var summary=await financial.SummaryAsync(payment.CustomerId);if(payment.Amount>summary.OutstandingBalance)return BadRequest(new{message="Payment exceeds outstanding balance."});payment.Status=PaymentStatus.Approved;payment.VerifiedById=User.UserId();payment.VerifiedAt=DateTime.UtcNow;db.FinancialAuditLogs.Add(new FinancialAuditLog{CustomerId=payment.CustomerId,PaymentId=payment.Id,Action=FinancialAuditAction.PaymentApproved,PerformedById=User.UserId()});await db.SaveChangesAsync();if(payment.Customer.FinancialAgreement!=null)await financial.RecalculateInstallmentsAsync(payment.Customer.FinancialAgreement.Id);return Ok(new{message="Payment approved."});}
+    public async Task<ActionResult> Approve(int id){var payment=await db.Payments.Include(x=>x.Customer).ThenInclude(x=>x.FinancialAgreement).SingleOrDefaultAsync(x=>x.Id==id);if(payment is null)return NotFound();if(payment.Status==PaymentStatus.Approved)return Ok(new{message="Already approved."});if(payment.Status==PaymentStatus.Rejected||payment.IsReversed)return Conflict(new{message="Rejected or reversed payment cannot be approved."});var summary=await financial.SummaryAsync(payment.CustomerId);if(payment.Amount>summary.OutstandingBalance)return BadRequest(new{message="Payment exceeds outstanding balance."});payment.Status=PaymentStatus.Approved;payment.VerifiedById=User.UserId();payment.VerifiedAt=DateTime.UtcNow;db.FinancialAuditLogs.Add(new FinancialAuditLog{CustomerId=payment.CustomerId,PaymentId=payment.Id,Action=FinancialAuditAction.PaymentApproved,PerformedById=User.UserId()});await db.SaveChangesAsync();if(payment.Customer.FinancialAgreement!=null)await financial.RecalculateInstallmentsAsync(payment.Customer.FinancialAgreement.Id);var after=await financial.SummaryAsync(payment.CustomerId);var (notificationTitle,notificationMessage)=AddPaymentNotification(payment.Customer,payment,after);await db.SaveChangesAsync();if(payment.Customer.AssignedToId.HasValue)await push.SendFinancialPushAsync(payment.Customer.AssignedToId.Value,payment.CustomerId,notificationTitle,notificationMessage,HttpContext.RequestAborted);return Ok(new{message="Payment approved."});}
 
     [HttpPost("{id:int}/reject"),RequirePermission(PermissionCodes.PaymentsApprove)]
     public async Task<ActionResult> Reject(int id,ReasonRequest request){if(string.IsNullOrWhiteSpace(request.Reason))return BadRequest(new{message="Reason is required."});var payment=await db.Payments.FindAsync(id);if(payment is null)return NotFound();if(payment.Status!=PaymentStatus.Pending)return Conflict(new{message="Only pending payments can be rejected."});payment.Status=PaymentStatus.Rejected;payment.RejectReason=request.Reason.Trim();payment.VerifiedById=User.UserId();payment.VerifiedAt=DateTime.UtcNow;db.FinancialAuditLogs.Add(new FinancialAuditLog{CustomerId=payment.CustomerId,PaymentId=payment.Id,Action=FinancialAuditAction.PaymentRejected,DetailsJson=JsonSerializer.Serialize(request),PerformedById=User.UserId()});await db.SaveChangesAsync();return Ok(new{message="Payment rejected."});}
 
     private void AddBalanceNotification(Customer customer,FinancialSummary summary,string eventKey){if(customer.AssignedToId is null)return;db.AppNotifications.Add(new AppNotification{UserId=customer.AssignedToId.Value,CustomerId=customer.Id,CustomerName=customer.Name,FileId=customer.FileId,Title="Customer balance updated",Message=$"{customer.Name}'s outstanding balance is now {summary.OutstandingBalance:0.00}.",Type="OutstandingBalanceChanged",Screen="customer",DueAmount=summary.CurrentDue,OutstandingBalance=summary.OutstandingBalance,EventKey=eventKey});}
+    private (string Title,string Message) AddPaymentNotification(Customer customer,Payment payment,FinancialSummary summary)
+    {
+        var title="Customer payment received";
+        var message=$"{customer.Name} paid {payment.Amount:0.00}. Outstanding balance: {summary.OutstandingBalance:0.00}.";
+        if(customer.AssignedToId.HasValue)db.AppNotifications.Add(new AppNotification{UserId=customer.AssignedToId.Value,CustomerId=customer.Id,CustomerName=customer.Name,FileId=customer.FileId,Title=title,Message=message,Type="CustomerPaymentReceived",Screen="customer",DueAmount=summary.CurrentDue,OutstandingBalance=summary.OutstandingBalance,EventKey=$"payment:received:{payment.Id}"});
+        return(title,message);
+    }
     public record RecordPaymentRequest(int CustomerId,decimal Amount,DateTime PaymentDate,PaymentMethod Method,PaymentPurpose Purpose,string? TransactionReference,int? InstallmentId,string? ProofUrl,string? Remarks);
     public record ReasonRequest(string Reason);
 }
