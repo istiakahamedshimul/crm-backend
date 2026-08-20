@@ -1,6 +1,6 @@
 namespace backend.Models;
 
-public enum LeadSource { Facebook, WhatsApp, Website, PhoneCall, WalkIn, Referral, Signboard, Event, Agent, ManualEntry, Other }
+public enum LeadSource { Facebook, WhatsApp, Website, PhoneCall, WalkIn, Referral, Signboard, Event, Agent, ManualEntry, Other, Company, Self }
 public enum LeadPriority { Cold, Warm, Hot }
 public enum LeadStatus { New, Assigned, Contacted, Interested, FollowUpNeeded, SiteVisitScheduled, Visited, Negotiation, InvoiceGenerated, Booked, Lost, NotInterested }
 public enum FollowUpType { WhatsApp, PhoneCall, Facebook, PhysicalMeeting, OfficeVisit, SiteVisit, Sms, Email, Other }

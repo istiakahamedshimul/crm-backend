@@ -14,6 +14,11 @@ public class Lead
     public int? ProjectId { get; set; }
     public Project? Project { get; set; }
     public LeadSource Source { get; set; } = LeadSource.ManualEntry;
+    public string? ReferrerName { get; set; }
+    public string? ReferrerPhone { get; set; }
+    public string? ReferrerEmail { get; set; }
+    public int? PreviousCustomerId { get; set; }
+    public Customer? PreviousCustomer { get; set; }
     public LeadPriority Priority { get; set; } = LeadPriority.Warm;
     public LeadStatus Status { get; set; } = LeadStatus.New;
     public int? AssignedToId { get; set; }
