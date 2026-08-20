@@ -43,6 +43,12 @@ public class FollowUpsController(CrmDbContext db) : ControllerBase
     [HttpPost]
     public async Task<ActionResult> CreateFollowUp(CreateFollowUpRequest request)
     {
+        if (request.Proofs is null || request.Proofs.Count == 0)
+            return BadRequest(new { message = "At least one follow-up photo or file is required." });
+        if (request.Proofs.Count > 20)
+            return BadRequest(new { message = "A maximum of 20 follow-up files can be submitted at once." });
+        if (request.Proofs.Any(x => string.IsNullOrWhiteSpace(x.FileUrl)))
+            return BadRequest(new { message = "Every follow-up attachment must have a valid uploaded file URL." });
         var lead = await db.Leads.FindAsync(request.LeadId);
         if (lead is null) return BadRequest(new { message = "Lead not found." });
         if (User.IsInRole("SalesExecutive") && lead.AssignedToId != User.UserId()) return Forbid();
