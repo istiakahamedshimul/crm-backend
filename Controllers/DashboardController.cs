@@ -140,6 +140,13 @@ public class DashboardController(CrmDbContext db, IFinancialService financial) :
         var approvedInRange = db.Payments.Where(x => x.Status == PaymentStatus.Approved && !x.IsReversed && x.PaymentDate >= rangeFrom && x.PaymentDate < endExclusive);
         var pendingInRange = db.Payments.Where(x => x.Status == PaymentStatus.Pending && !x.IsReversed && x.PaymentDate >= rangeFrom && x.PaymentDate < endExclusive);
         var commissionsInRange = db.Commissions.Where(x => x.Status != CommissionStatus.Rejected && x.CreatedAt >= rangeFrom && x.CreatedAt < endExclusive);
+        var targetMonth = new DateOnly(today.Year, today.Month, 1);
+        var targetMonthStart = targetMonth.ToDateTime(TimeOnly.MinValue);
+        var targetMonthEnd = targetMonthStart.AddMonths(1);
+        var unitTargetTotal = await db.MonthlySalesTargets.Where(x => x.Month == targetMonth).SumAsync(x => (int?)x.MinimumSalesUnits) ?? 0;
+        var collectionTargetTotal = await db.MonthlySalesTargets.Where(x => x.Month == targetMonth).SumAsync(x => (decimal?)x.MinimumCollectionAmount) ?? 0;
+        var unitsCompleted = await db.Customers.CountAsync(x => x.BookedAt >= targetMonthStart && x.BookedAt < targetMonthEnd);
+        var collectionCompleted = await db.Payments.Where(x => x.Status == PaymentStatus.Approved && !x.IsReversed && x.PaymentDate >= targetMonthStart && x.PaymentDate < targetMonthEnd).SumAsync(x => (decimal?)x.Amount) ?? 0;
 
         return Ok(new
         {
@@ -159,7 +166,8 @@ public class DashboardController(CrmDbContext db, IFinancialService financial) :
             totalOverdue = summaries.Sum(x => x.OverdueAmount),
             customersWithOverdueInstallments = summaries.Count(x => x.OverdueAmount > 0),
             pendingPayments = await pendingInRange.CountAsync(),
-            approvedPayments = await approvedInRange.CountAsync()
+            approvedPayments = await approvedInRange.CountAsync(),
+            salesTargetProgress = new { month = targetMonth, unitTarget = unitTargetTotal, unitsCompleted, unitVariance = unitsCompleted - unitTargetTotal, collectionTarget = collectionTargetTotal, collectionCompleted, collectionVariance = collectionCompleted - collectionTargetTotal }
         });
     }
 }

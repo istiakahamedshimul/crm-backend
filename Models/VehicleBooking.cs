@@ -28,6 +28,8 @@ public class VehicleBooking
     public int TimezoneOffsetMinutes { get; set; }
     public VehicleBookingStatus Status { get; set; } = VehicleBookingStatus.Pending;
     public string? AdminRemarks { get; set; }
+    public string? CancellationReason { get; set; }
+    public DateTime? CancelledAt { get; set; }
     public int? ReviewedById { get; set; }
     public User? ReviewedBy { get; set; }
     public DateTime? ReviewedAt { get; set; }
