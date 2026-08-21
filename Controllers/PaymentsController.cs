@@ -20,6 +20,7 @@ public class PaymentsController(CrmDbContext db, IFinancialService financial, IO
                 x.Id,
                 x.CustomerId,
                 Customer = x.Customer.Name,
+                FileId = x.Customer.FileId,
                 x.CollectionNumber,
                 x.Amount,
                 x.PaymentDate,
