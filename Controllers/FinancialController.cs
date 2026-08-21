@@ -43,7 +43,7 @@ public class FinancialController(CrmDbContext db, IFinancialService financial) :
             .Select(x => new { x.Id, x.FinancialAgreementId, x.InstallmentNumber, x.DueDate, x.ExpectedAmount, x.PaidAmount, x.Status, x.PaidAt })
             .ToListAsync();
         var payments = await db.Payments.AsNoTracking().Where(x => x.CustomerId == customerId)
-            .OrderByDescending(x => x.CreatedAt)
+            .OrderByDescending(x => x.PaymentDate).ThenByDescending(x => x.CreatedAt)
             .Select(x => new { x.Id, x.Amount, x.PaymentDate, x.Method, x.Purpose, x.InstallmentId, x.TransactionReference, x.ProofUrl, x.Status, x.IsReversed, x.ReversalReason, x.CreatedAt })
             .ToListAsync();
         var audit = await db.FinancialAuditLogs.AsNoTracking().Where(x => x.CustomerId == customerId)
