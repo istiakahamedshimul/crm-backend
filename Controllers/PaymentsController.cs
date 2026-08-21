@@ -12,7 +12,7 @@ public class PaymentsController(CrmDbContext db, IFinancialService financial, IO
     {
         var userId = User.UserId();
         var items = await db.Payments
-            .Where(x => x.Customer.BookedById == userId)
+            .Where(x => x.SalesExecutiveId == userId)
             .OrderByDescending(x => x.PaymentDate)
             .ThenByDescending(x => x.CreatedAt)
             .Select(x => new
@@ -45,7 +45,7 @@ public class PaymentsController(CrmDbContext db, IFinancialService financial, IO
         var query=db.Payments.Include(x=>x.Customer).Include(x=>x.SalesExecutive).AsQueryable();
         if(customerId.HasValue)query=query.Where(x=>x.CustomerId==customerId); if(salesExecutiveId.HasValue)query=query.Where(x=>x.SalesExecutiveId==salesExecutiveId); if(status.HasValue)query=query.Where(x=>x.Status==status);
         var total=await query.CountAsync();
-        var items=await query.OrderByDescending(x=>x.CreatedAt).Skip((page-1)*pageSize).Take(pageSize).Select(x=>new{x.Id,x.CustomerId,Customer=x.Customer.Name,x.CollectionNumber,x.SalesExecutiveId,SalesExecutive=x.SalesExecutive.FullName,x.Amount,x.PaymentDate,x.Method,x.Purpose,x.TransactionReference,x.InstallmentId,x.Status,x.ProofUrl,x.Remarks,x.IsReversed,x.ReversalReason,x.CreatedAt}).ToListAsync();
+        var items=await query.OrderByDescending(x=>x.PaymentDate).ThenByDescending(x=>x.CreatedAt).Skip((page-1)*pageSize).Take(pageSize).Select(x=>new{x.Id,x.CustomerId,Customer=x.Customer.Name,x.CollectionNumber,x.SalesExecutiveId,SalesExecutive=x.SalesExecutive.FullName,x.Amount,x.PaymentDate,x.Method,x.Purpose,x.TransactionReference,x.InstallmentId,x.Status,x.ProofUrl,x.Remarks,x.RejectReason,x.IsReversed,x.ReversalReason,x.CreatedAt}).ToListAsync();
         return Ok(new{items,total,page,pageSize});
     }
 
