@@ -6,6 +6,38 @@ namespace backend.Controllers;
 [ApiController, Authorize, Route("api/payments"), Tags("Payments")]
 public class PaymentsController(CrmDbContext db, IFinancialService financial, IOneSignalNotificationService push) : ControllerBase
 {
+    [HttpGet("mine")]
+    [Authorize(Roles = "SalesExecutive")]
+    public async Task<ActionResult> GetMine()
+    {
+        var userId = User.UserId();
+        var items = await db.Payments
+            .Where(x => x.Customer.BookedById == userId)
+            .OrderByDescending(x => x.PaymentDate)
+            .ThenByDescending(x => x.CreatedAt)
+            .Select(x => new
+            {
+                x.Id,
+                x.CustomerId,
+                Customer = x.Customer.Name,
+                x.CollectionNumber,
+                x.Amount,
+                x.PaymentDate,
+                x.Method,
+                x.Purpose,
+                x.TransactionReference,
+                x.Status,
+                x.ProofUrl,
+                x.Remarks,
+                x.IsReversed,
+                x.ReversalReason,
+                x.CreatedAt
+            })
+            .ToListAsync();
+
+        return Ok(items);
+    }
+
     [HttpGet, RequirePermission(PermissionCodes.PaymentsView)]
     public async Task<ActionResult> Get([FromQuery]int page=1,[FromQuery]int pageSize=50,[FromQuery]int? customerId=null,[FromQuery]int? salesExecutiveId=null,[FromQuery]PaymentStatus? status=null)
     {
@@ -38,7 +70,7 @@ public class PaymentsController(CrmDbContext db, IFinancialService financial, IO
         else if(request.InstallmentId.HasValue)return BadRequest(new{message="An installment can only be selected for an EMI payment."});
 
         await using var transaction=await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
-        var payment=new Payment{CustomerId=request.CustomerId,CollectionNumber=$"COL-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid():N}"[..31],SalesExecutiveId=customer.AssignedToId.Value,Amount=request.Amount,PaymentDate=request.PaymentDate.ToUniversalTime(),Method=request.Method,Purpose=request.Purpose,TransactionReference=request.TransactionReference?.Trim(),InstallmentId=request.InstallmentId,ProofUrl=request.ProofUrl,Remarks=request.Remarks,Status=PaymentStatus.Approved,SubmittedById=User.UserId(),VerifiedById=User.UserId(),VerifiedAt=DateTime.UtcNow,IdempotencyKey=key};
+        var payment=new Payment{CustomerId=request.CustomerId,CollectionNumber=$"COL-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid():N}"[..31],SalesExecutiveId=customer.BookedById??customer.AssignedToId.Value,Amount=request.Amount,PaymentDate=request.PaymentDate.ToUniversalTime(),Method=request.Method,Purpose=request.Purpose,TransactionReference=request.TransactionReference?.Trim(),InstallmentId=request.InstallmentId,ProofUrl=request.ProofUrl,Remarks=request.Remarks,Status=PaymentStatus.Approved,SubmittedById=User.UserId(),VerifiedById=User.UserId(),VerifiedAt=DateTime.UtcNow,IdempotencyKey=key};
         db.Add(payment); db.FinancialAuditLogs.Add(new FinancialAuditLog{CustomerId=request.CustomerId,PaymentId=payment.Id,Action=FinancialAuditAction.PaymentRecorded,DetailsJson=JsonSerializer.Serialize(request),PerformedById=User.UserId()});
         try
         {
