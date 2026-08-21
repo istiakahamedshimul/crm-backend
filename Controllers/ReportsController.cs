@@ -17,11 +17,16 @@ public class ReportsController(CrmDbContext db, IFinancialService financial) : C
     [HttpGet("basic")]
     public async Task<ActionResult> GetBasicReport()
     {
+        var paymentRows = await db.Payments.Select(x => new
+        {
+            Status = x.IsReversed ? PaymentStatus.Rejected : x.Status,
+            x.Amount
+        }).ToListAsync();
         return Ok(new
         {
             leadStatus = await db.Leads.GroupBy(x => x.Status).Select(x => new { status = x.Key, count = x.Count() }).ToListAsync(),
             leadSource = await db.Leads.GroupBy(x => x.Source).Select(x => new { source = x.Key, count = x.Count() }).ToListAsync(),
-            paymentStatus = await db.Payments.GroupBy(x => x.Status).Select(x => new { status = x.Key, amount = x.Sum(p => p.Amount), count = x.Count() }).ToListAsync(),
+            paymentStatus = paymentRows.GroupBy(x => x.Status).Select(x => new { status = x.Key, amount = x.Sum(p => p.Amount), count = x.Count() }).ToList(),
             invoiceStatus = await db.Invoices.GroupBy(x => x.Status).Select(x => new { status = x.Key, amount = x.Sum(i => i.FinalAmount), count = x.Count() }).ToListAsync()
         });
     }

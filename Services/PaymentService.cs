@@ -13,7 +13,7 @@ public class PaymentService(CrmDbContext db) : IPaymentService
         {
             var invoice = await db.Invoices.FirstAsync(x => x.Id == payment.InvoiceId.Value);
             var approvedAmount = await db.Payments
-                .Where(x => x.InvoiceId == invoice.Id && x.Status == PaymentStatus.Approved && x.Id != payment.Id)
+                .Where(x => x.InvoiceId == invoice.Id && x.Status == PaymentStatus.Approved && !x.IsReversed && x.Id != payment.Id)
                 .SumAsync(x => x.Amount) + payment.Amount;
             invoice.Status = approvedAmount >= invoice.FinalAmount ? InvoiceStatus.Paid : InvoiceStatus.PartiallyPaid;
         }
