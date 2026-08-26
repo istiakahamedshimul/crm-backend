@@ -15,5 +15,7 @@ public class User
     public DateTime? LocationTrackingChangedAtUtc { get; set; }
     public int RoleId { get; set; }
     public Role Role { get; set; } = null!;
+    public int? SalesTeamId { get; set; }
+    public SalesTeam? SalesTeam { get; set; }
     public List<UserPermission> UserPermissions { get; set; } = [];
 }

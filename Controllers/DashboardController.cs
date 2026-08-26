@@ -12,7 +12,7 @@ namespace backend.Controllers;
 public class DashboardController(CrmDbContext db, IFinancialService financial) : ControllerBase
 {
     [HttpGet("sales-report")]
-    [Authorize(Roles = "SuperAdmin,BrandAndIT,SalesExecutive")]
+    [Authorize(Roles = "SuperAdmin,BrandAndIT,SalesExecutive,GroupLeader")]
     public async Task<ActionResult> GetSalesReport([FromQuery] int salesExecutiveId, [FromQuery] DateTime from, [FromQuery] DateTime to)
     {
         var rangeFrom = from.Date;
@@ -23,7 +23,15 @@ public class DashboardController(CrmDbContext db, IFinancialService financial) :
         var userId = User.IsInRole("SalesExecutive") ? User.UserId() : salesExecutiveId;
         if (User.IsInRole("SalesExecutive") && salesExecutiveId != userId)
             return Forbid();
+        if (User.IsInRole("GroupLeader") && !await db.Users.AnyAsync(x => x.Id == userId && x.SalesTeam != null && x.SalesTeam.SalesGroup.GroupLeaderId == User.UserId())) return Forbid();
         var endExclusive = rangeTo.AddDays(1);
+
+        if (User.IsInRole("GroupLeader"))
+        {
+            var salesIds = await db.Users.Where(x => x.SalesTeam != null && x.SalesTeam.SalesGroup.GroupLeaderId == User.UserId()).Select(x => x.Id).ToListAsync();
+            var monthFrom = new DateOnly(rangeFrom.Year, rangeFrom.Month, 1); var monthTo = new DateOnly(rangeTo.Year, rangeTo.Month, 1);
+            return Ok(new { leads = await db.Leads.CountAsync(x => x.AssignedToId.HasValue && salesIds.Contains(x.AssignedToId.Value) && x.CreatedAt >= rangeFrom && x.CreatedAt < endExclusive), customers = await db.Customers.CountAsync(x => x.AssignedToId.HasValue && salesIds.Contains(x.AssignedToId.Value)), collectionCount = await db.MonthlyCollections.CountAsync(x => salesIds.Contains(x.SalesExecutiveId) && x.Month >= monthFrom && x.Month <= monthTo), totalCollection = await db.MonthlyCollections.Where(x => salesIds.Contains(x.SalesExecutiveId) && x.Month >= monthFrom && x.Month <= monthTo).SumAsync(x => (decimal?)x.Amount) ?? 0, collectionFrom = rangeFrom, collectionTo = rangeTo });
+        }
         var profile = await db.Users.Where(x => x.Id == userId && x.Role.Name == "SalesExecutive").Select(x => new { x.FullName, x.Email }).SingleOrDefaultAsync();
         if (profile is null) return NotFound(new { message = "Sales executive not found." });
         var leads = await db.Leads.Where(x => x.AssignedToId == userId && x.CreatedAt < endExclusive)
