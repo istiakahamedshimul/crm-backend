@@ -84,8 +84,7 @@ public class UsersController(CrmDbContext db) : ControllerBase
             LeadStatus.SiteVisitScheduled, LeadStatus.Visited, LeadStatus.Negotiation,
             LeadStatus.InvoiceGenerated
         };
-        var approvedCollections = db.Payments.Where(x =>
-            x.SalesExecutiveId == id && x.Status == PaymentStatus.Approved && !x.IsReversed);
+        var approvedCollections = db.MonthlyCollections.Where(x => x.SalesExecutiveId == id);
         var currentMonth = new DateOnly(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
         var target = await db.MonthlySalesTargets.FirstOrDefaultAsync(x => x.SalesExecutiveId == id && x.Month == currentMonth);
         var targetHistory = await BuildTargetHistory(id);
@@ -171,7 +170,7 @@ public class UsersController(CrmDbContext db) : ControllerBase
             var start = target.Month.ToDateTime(TimeOnly.MinValue);
             var end = start.AddMonths(1);
             var units = await db.Customers.CountAsync(x => x.BookedById == id && x.BookedAt >= start && x.BookedAt < end);
-            var amount = await db.Payments.Where(x => x.SalesExecutiveId == id && x.Status == PaymentStatus.Approved && !x.IsReversed && x.PaymentDate >= start && x.PaymentDate < end).SumAsync(x => (decimal?)x.Amount) ?? 0;
+            var amount = await db.MonthlyCollections.Where(x => x.SalesExecutiveId == id && x.Month == target.Month).SumAsync(x => (decimal?)x.Amount) ?? 0;
             result.Add(new TargetProgress(target.Month, target.MinimumSalesUnits, units, units - target.MinimumSalesUnits, target.MinimumCollectionAmount, amount, amount - target.MinimumCollectionAmount));
         }
         return result;

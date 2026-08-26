@@ -30,8 +30,8 @@ public class DashboardController(CrmDbContext db, IFinancialService financial) :
             .Select(x => new { x.Status, x.CreatedAt }).ToListAsync();
         var bookings = await db.Customers.Where(x => x.BookedById == userId && x.BookedAt >= rangeFrom && x.BookedAt < endExclusive)
             .Select(x => x.BookedAt!.Value).ToListAsync();
-        var payments = await db.Payments.Where(x => x.SalesExecutiveId == userId && x.Status == PaymentStatus.Approved && !x.IsReversed && x.PaymentDate >= rangeFrom && x.PaymentDate < endExclusive)
-            .Select(x => new { x.PaymentDate, x.Amount }).ToListAsync();
+        var collectionRows = await db.MonthlyCollections.Where(x => x.SalesExecutiveId == userId && x.Month >= new DateOnly(rangeFrom.Year, rangeFrom.Month, 1) && x.Month <= new DateOnly(rangeTo.Year, rangeTo.Month, 1))
+            .Select(x => new { x.Month, x.Amount }).ToListAsync();
         var commissions = await db.Commissions.Where(x => x.SalesExecutiveId == userId && x.Status != CommissionStatus.Rejected && x.CreatedAt >= rangeFrom && x.CreatedAt < endExclusive)
             .Select(x => new { x.CreatedAt, x.Amount }).ToListAsync();
         var targets = await db.MonthlySalesTargets.Where(x => x.SalesExecutiveId == userId &&
@@ -53,7 +53,7 @@ public class DashboardController(CrmDbContext db, IFinancialService financial) :
             var statusCounts = Enum.GetValues<LeadStatus>().ToDictionary(status => status.ToString(), status => monthLeads.Count(x => x.Status == status));
             var wins = bookings.Count(x => x >= effectiveStart && x < effectiveEnd);
             var lost = monthLeads.Count(x => x.Status == LeadStatus.Lost);
-            var collection = payments.Where(x => x.PaymentDate >= effectiveStart && x.PaymentDate < effectiveEnd).Sum(x => x.Amount);
+            var collection = collectionRows.Where(x => x.Month == DateOnly.FromDateTime(cursor)).Sum(x => x.Amount);
             var commission = commissions.Where(x => x.CreatedAt >= effectiveStart && x.CreatedAt < effectiveEnd).Sum(x => x.Amount);
             targets.TryGetValue(DateOnly.FromDateTime(cursor), out var target);
             var unitTarget = target?.MinimumSalesUnits ?? 0;
@@ -69,7 +69,7 @@ public class DashboardController(CrmDbContext db, IFinancialService financial) :
             followingUp = filteredLeads.Count(x => activeFollowUpStatuses.Contains(x.Status)),
             bookedClients = bookings.Count, lost = filteredLeads.Count(x => x.Status == LeadStatus.Lost),
             notInterested = filteredLeads.Count(x => x.Status == LeadStatus.NotInterested),
-            totalCollection = payments.Sum(x => x.Amount), collectionCount = payments.Count,
+            totalCollection = collectionRows.Sum(x => x.Amount), collectionCount = collectionRows.Count,
             totalCommission = commissions.Sum(x => x.Amount), months });
     }
 
@@ -85,7 +85,7 @@ public class DashboardController(CrmDbContext db, IFinancialService financial) :
             var start = target.Month.ToDateTime(TimeOnly.MinValue);
             var end = start.AddMonths(1);
             var units = await db.Customers.CountAsync(x => x.BookedById == userId && x.BookedAt >= start && x.BookedAt < end);
-            var amount = await db.Payments.Where(x => x.SalesExecutiveId == userId && x.Status == PaymentStatus.Approved && !x.IsReversed && x.PaymentDate >= start && x.PaymentDate < end).SumAsync(x => (decimal?)x.Amount) ?? 0;
+            var amount = await db.MonthlyCollections.Where(x => x.SalesExecutiveId == userId && x.Month == target.Month).SumAsync(x => (decimal?)x.Amount) ?? 0;
             rows.Add(new { target.Month, salesUnitTarget = target.MinimumSalesUnits, salesUnitsAchieved = units, salesUnitVariance = units - target.MinimumSalesUnits, collectionTarget = target.MinimumCollectionAmount, collectionAchieved = amount, collectionVariance = amount - target.MinimumCollectionAmount });
         }
         return Ok(rows);
@@ -124,7 +124,7 @@ public class DashboardController(CrmDbContext db, IFinancialService financial) :
             var unitTarget = target?.MinimumSalesUnits ?? 0;
             var collectionTarget = target?.MinimumCollectionAmount ?? 0;
             var units = await db.Customers.CountAsync(x => x.BookedById == userId && x.BookedAt >= monthStart && x.BookedAt < monthEnd);
-            var collection = await db.Payments.Where(x => x.SalesExecutiveId == userId && x.Status == PaymentStatus.Approved && !x.IsReversed && x.PaymentDate >= monthStart && x.PaymentDate < monthEnd).SumAsync(x => (decimal?)x.Amount) ?? 0;
+            var collection = await db.MonthlyCollections.Where(x => x.SalesExecutiveId == userId && x.Month == month).SumAsync(x => (decimal?)x.Amount) ?? 0;
             return Ok(new { assignedCustomers = customerIds.Count, customersWithCurrentDues = summaries.Count(x => x.CurrentDue > 0), customersWithOverduePayments = summaries.Count(x => x.OverdueAmount > 0), totalOutstanding = summaries.Sum(x => x.OutstandingBalance), upcomingEmiReminders = summaries.Count(x => x.NextEmiDueDate.HasValue), currentTarget = new { month, salesUnitTarget = unitTarget, salesUnitsAchieved = units, salesUnitVariance = units - unitTarget, collectionTarget, collectionAchieved = collection, collectionVariance = collection - collectionTarget } });
         }
 
@@ -137,7 +137,7 @@ public class DashboardController(CrmDbContext db, IFinancialService financial) :
                 collectionFrom = rangeFrom, collectionTo = rangeTo
             });
 
-        var approvedInRange = db.Payments.Where(x => x.Status == PaymentStatus.Approved && !x.IsReversed && x.PaymentDate >= rangeFrom && x.PaymentDate < endExclusive);
+        var approvedInRange = db.MonthlyCollections.Where(x => x.Month >= new DateOnly(rangeFrom.Year, rangeFrom.Month, 1) && x.Month <= new DateOnly(rangeTo.Year, rangeTo.Month, 1));
         var pendingInRange = db.Payments.Where(x => x.Status == PaymentStatus.Pending && !x.IsReversed && x.PaymentDate >= rangeFrom && x.PaymentDate < endExclusive);
         var targetMonth = new DateOnly(today.Year, today.Month, 1);
         var targetMonthStart = targetMonth.ToDateTime(TimeOnly.MinValue);
@@ -145,7 +145,7 @@ public class DashboardController(CrmDbContext db, IFinancialService financial) :
         var unitTargetTotal = await db.MonthlySalesTargets.Where(x => x.Month == targetMonth).SumAsync(x => (int?)x.MinimumSalesUnits) ?? 0;
         var collectionTargetTotal = await db.MonthlySalesTargets.Where(x => x.Month == targetMonth).SumAsync(x => (decimal?)x.MinimumCollectionAmount) ?? 0;
         var unitsCompleted = await db.Customers.CountAsync(x => x.BookedAt >= targetMonthStart && x.BookedAt < targetMonthEnd);
-        var collectionCompleted = await db.Payments.Where(x => x.Status == PaymentStatus.Approved && !x.IsReversed && x.PaymentDate >= targetMonthStart && x.PaymentDate < targetMonthEnd).SumAsync(x => (decimal?)x.Amount) ?? 0;
+        var collectionCompleted = await db.MonthlyCollections.Where(x => x.Month == targetMonth).SumAsync(x => (decimal?)x.Amount) ?? 0;
 
         return Ok(new
         {
@@ -156,17 +156,17 @@ public class DashboardController(CrmDbContext db, IFinancialService financial) :
             totalCollected = summaries.Sum(x => x.TotalPaid),
             totalCollection = await approvedInRange.SumAsync(x => (decimal?)x.Amount) ?? 0,
             collectionCount = await approvedInRange.CountAsync(),
-            pendingCollection = await pendingInRange.SumAsync(x => (decimal?)x.Amount) ?? 0,
+            pendingCollection = 0,
             // Commission is always derived from the exact same filtered, verified
             // collection set so the two figures can never drift apart.
-            totalCommission = Math.Round((await approvedInRange.SumAsync(x => (decimal?)x.Amount) ?? 0) * 0.07m, 2, MidpointRounding.AwayFromZero),
+            totalCommission = await db.Commissions.Where(x => x.Status != CommissionStatus.Rejected && x.CreatedAt >= rangeFrom && x.CreatedAt < endExclusive).SumAsync(x => (decimal?)x.Amount) ?? 0,
             collectionFrom = rangeFrom,
             collectionTo = rangeTo,
             totalOutstanding = summaries.Sum(x => x.OutstandingBalance),
             totalDue = summaries.Sum(x => x.CurrentDue),
             totalOverdue = summaries.Sum(x => x.OverdueAmount),
             customersWithOverdueInstallments = summaries.Count(x => x.OverdueAmount > 0),
-            pendingPayments = await pendingInRange.CountAsync(),
+            pendingPayments = 0,
             approvedPayments = await approvedInRange.CountAsync(),
             salesTargetProgress = new { month = targetMonth, unitTarget = unitTargetTotal, unitsCompleted, unitVariance = unitsCompleted - unitTargetTotal, collectionTarget = collectionTargetTotal, collectionCompleted, collectionVariance = collectionCompleted - collectionTargetTotal }
         });

@@ -17,16 +17,12 @@ public class ReportsController(CrmDbContext db, IFinancialService financial) : C
     [HttpGet("basic")]
     public async Task<ActionResult> GetBasicReport()
     {
-        var paymentRows = await db.Payments.Select(x => new
-        {
-            Status = x.IsReversed ? PaymentStatus.Rejected : x.Status,
-            x.Amount
-        }).ToListAsync();
+        var collectionRows = await db.MonthlyCollections.Select(x => new { x.Amount }).ToListAsync();
         return Ok(new
         {
             leadStatus = await db.Leads.GroupBy(x => x.Status).Select(x => new { status = x.Key, count = x.Count() }).ToListAsync(),
             leadSource = await db.Leads.GroupBy(x => x.Source).Select(x => new { source = x.Key, count = x.Count() }).ToListAsync(),
-            paymentStatus = paymentRows.GroupBy(x => x.Status).Select(x => new { status = x.Key, amount = x.Sum(p => p.Amount), count = x.Count() }).ToList(),
+            paymentStatus = new[] { new { status = PaymentStatus.Approved, amount = collectionRows.Sum(x => x.Amount), count = collectionRows.Count } },
             invoiceStatus = await db.Invoices.GroupBy(x => x.Status).Select(x => new { status = x.Key, amount = x.Sum(i => i.FinalAmount), count = x.Count() }).ToListAsync()
         });
     }
@@ -35,7 +31,7 @@ public class ReportsController(CrmDbContext db, IFinancialService financial) : C
     public async Task<ActionResult> Financial([FromQuery]DateTime? from=null,[FromQuery]DateTime? to=null,[FromQuery]int? salesExecutiveId=null)
     {
         var customers=db.Customers.AsQueryable();if(salesExecutiveId.HasValue)customers=customers.Where(x=>x.AssignedToId==salesExecutiveId);var ids=await customers.Select(x=>x.Id).ToListAsync();var summaries=new List<FinancialSummary>();foreach(var id in ids)summaries.Add(await financial.SummaryAsync(id));
-        var payments=db.Payments.Where(x=>x.Status==PaymentStatus.Approved&&!x.IsReversed);if(from.HasValue)payments=payments.Where(x=>x.PaymentDate>=from.Value);if(to.HasValue)payments=payments.Where(x=>x.PaymentDate<to.Value.AddDays(1));if(salesExecutiveId.HasValue)payments=payments.Where(x=>x.SalesExecutiveId==salesExecutiveId);
-        return Ok(new{totalCollectible=summaries.Sum(x=>x.TotalAgreedAmount),totalCollected=await payments.SumAsync(x=>(decimal?)x.Amount)??0,totalOutstanding=summaries.Sum(x=>x.OutstandingBalance),totalDue=summaries.Sum(x=>x.CurrentDue),totalOverdue=summaries.Sum(x=>x.OverdueAmount),customersWithOverdue=summaries.Count(x=>x.OverdueAmount>0),collectionBySalesExecutive=await payments.GroupBy(x=>x.SalesExecutiveId).Select(x=>new{salesExecutiveId=x.Key,amount=x.Sum(p=>p.Amount),count=x.Count()}).ToListAsync()});
+        var collections=db.MonthlyCollections.AsQueryable();if(from.HasValue)collections=collections.Where(x=>x.Month>=new DateOnly(from.Value.Year,from.Value.Month,1));if(to.HasValue)collections=collections.Where(x=>x.Month<=new DateOnly(to.Value.Year,to.Value.Month,1));if(salesExecutiveId.HasValue)collections=collections.Where(x=>x.SalesExecutiveId==salesExecutiveId);
+        return Ok(new{totalCollectible=summaries.Sum(x=>x.TotalAgreedAmount),totalCollected=await collections.SumAsync(x=>(decimal?)x.Amount)??0,totalOutstanding=summaries.Sum(x=>x.OutstandingBalance),totalDue=summaries.Sum(x=>x.CurrentDue),totalOverdue=summaries.Sum(x=>x.OverdueAmount),customersWithOverdue=summaries.Count(x=>x.OverdueAmount>0),collectionBySalesExecutive=await collections.GroupBy(x=>x.SalesExecutiveId).Select(x=>new{salesExecutiveId=x.Key,amount=x.Sum(p=>p.Amount),count=x.Count()}).ToListAsync()});
     }
 }

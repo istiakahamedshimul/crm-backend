@@ -29,6 +29,8 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options) : DbContext(op
     public DbSet<FinancialAuditLog> FinancialAuditLogs => Set<FinancialAuditLog>(); public DbSet<AuditLog> AuditLogs => Set<AuditLog>(); public DbSet<NotificationSettings> NotificationSettings => Set<NotificationSettings>();
     public DbSet<DailyWorkReport> DailyWorkReports => Set<DailyWorkReport>();
     public DbSet<MonthlySalesTarget> MonthlySalesTargets => Set<MonthlySalesTarget>();
+    public DbSet<MonthlyCollection> MonthlyCollections => Set<MonthlyCollection>();
+    public DbSet<CustomerDue> CustomerDues => Set<CustomerDue>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -74,5 +76,13 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options) : DbContext(op
         modelBuilder.Entity<MonthlySalesTarget>().Property(x => x.MinimumCollectionAmount).HasPrecision(18, 2);
         modelBuilder.Entity<MonthlySalesTarget>().HasOne(x => x.SalesExecutive).WithMany().HasForeignKey(x => x.SalesExecutiveId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<MonthlySalesTarget>().HasOne(x => x.UpdatedBy).WithMany().HasForeignKey(x => x.UpdatedById).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<MonthlyCollection>().HasIndex(x => new { x.SalesExecutiveId, x.Month }).IsUnique();
+        modelBuilder.Entity<MonthlyCollection>().Property(x => x.Amount).HasPrecision(18, 2);
+        modelBuilder.Entity<MonthlyCollection>().HasOne(x => x.SalesExecutive).WithMany().HasForeignKey(x => x.SalesExecutiveId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<MonthlyCollection>().HasOne(x => x.RecordedBy).WithMany().HasForeignKey(x => x.RecordedById).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<CustomerDue>().HasIndex(x => new { x.CustomerId, x.Month }).IsUnique();
+        modelBuilder.Entity<CustomerDue>().Property(x => x.Amount).HasPrecision(18, 2);
+        modelBuilder.Entity<CustomerDue>().HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<CustomerDue>().HasOne(x => x.RecordedBy).WithMany().HasForeignKey(x => x.RecordedById).OnDelete(DeleteBehavior.Restrict);
     }
 }
