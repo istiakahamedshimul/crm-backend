@@ -142,7 +142,9 @@ using (var scope = app.Services.CreateScope())
     }
     catch (Exception ex)
     {
-        logger.LogWarning(ex, "Database setup skipped. Start MySQL/XAMPP and run the API again.");
+        logger.LogError(ex, "Database migration or seed failed.");
+        if (!app.Environment.IsDevelopment()) throw;
+        logger.LogWarning("Database setup skipped in Development. Start MySQL/XAMPP and run the API again.");
     }
 }
 
