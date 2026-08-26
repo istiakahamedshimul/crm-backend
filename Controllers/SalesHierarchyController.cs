@@ -14,19 +14,18 @@ public class SalesHierarchyController(CrmDbContext db) : ControllerBase
     [HttpGet]
     public async Task<ActionResult> Get()
     {
-        var groups = db.SalesGroups.AsNoTracking().AsQueryable();
-        if (User.IsInRole("GroupLeader")) groups = groups.Where(x => x.GroupLeaderId == User.UserId());
+        var userId = User.UserId();
+        var groupRows = db.SalesGroups.AsNoTracking().Include(x => x.GroupLeader).AsQueryable();
+        if (User.IsInRole("GroupLeader")) groupRows = groupRows.Where(x => x.GroupLeaderId == userId);
+        else if (User.IsInRole("SalesExecutive")) groupRows = groupRows.Where(x => db.SalesTeams.Any(t => t.SalesGroupId == x.Id && t.TeamLeaderId == userId));
         else if (!User.IsInRole("SuperAdmin") && !User.IsInRole("BrandAndIT")) return Forbid();
-        return Ok(await groups.OrderBy(x => x.Name).Select(g => new
-        {
-            g.Id, g.Name, g.GroupLeaderId, GroupLeader = g.GroupLeader.FullName, g.IsActive,
-            Teams = db.SalesTeams.Where(t => t.SalesGroupId == g.Id).OrderBy(t => t.ParentTeamId).ThenBy(t => t.Name).Select(t => new
-            {
-                t.Id, t.Name, t.ParentTeamId, t.TeamLeaderId, TeamLeader = t.TeamLeader == null ? null : t.TeamLeader.FullName, t.IsActive,
-                MemberCount = db.Users.Count(u => u.SalesTeamId == t.Id && u.IsActive),
-                Members = db.Users.Where(u => u.SalesTeamId == t.Id).OrderBy(u => u.FullName).Select(u => new { u.Id, u.FullName, u.Designation, u.IsActive })
-            })
-        }).ToListAsync());
+        var groups = await groupRows.OrderBy(x => x.Name).ToListAsync();
+        var groupIds = groups.Select(x => x.Id).ToList();
+        var teams = await db.SalesTeams.AsNoTracking().Include(x => x.TeamLeader).Where(x => groupIds.Contains(x.SalesGroupId)).OrderBy(x => x.ParentTeamId).ThenBy(x => x.Name).ToListAsync();
+        if (User.IsInRole("SalesExecutive")) { var ledIds = teams.Where(x => x.TeamLeaderId == userId).Select(x => x.Id).ToHashSet(); teams = teams.Where(x => ledIds.Contains(x.Id) || x.ParentTeamId.HasValue && ledIds.Contains(x.ParentTeamId.Value)).ToList(); }
+        var teamIds = teams.Select(x => x.Id).ToList();
+        var members = await db.Users.AsNoTracking().Where(x => x.SalesTeamId.HasValue && teamIds.Contains(x.SalesTeamId.Value)).OrderBy(x => x.FullName).Select(x => new { x.Id, x.FullName, x.Designation, x.IsActive, x.SalesTeamId }).ToListAsync();
+        return Ok(groups.Select(g => new { g.Id, g.Name, g.GroupLeaderId, GroupLeader = g.GroupLeader.FullName, g.IsActive, Teams = teams.Where(t => t.SalesGroupId == g.Id).Select(t => new { t.Id, t.Name, t.ParentTeamId, t.TeamLeaderId, TeamLeader = t.TeamLeader?.FullName, t.IsActive, MemberCount = members.Count(u => u.SalesTeamId == t.Id && u.IsActive), Members = members.Where(u => u.SalesTeamId == t.Id).Select(u => new { u.Id, u.FullName, u.Designation, u.IsActive }) }) }));
     }
 
     [HttpPost("groups"), Authorize(Roles = "SuperAdmin")]
@@ -86,29 +85,30 @@ public class SalesHierarchyController(CrmDbContext db) : ControllerBase
         team.TeamLeaderId = request.TeamLeaderId; await db.SaveChangesAsync(); return NoContent();
     }
 
-    [HttpGet("groups/{groupId:int}/report"), Authorize(Roles = "SuperAdmin,GroupLeader")]
+    [HttpGet("groups/{groupId:int}/report"), Authorize(Roles = "SuperAdmin,GroupLeader,SalesExecutive")]
     public async Task<ActionResult> GroupReport(int groupId, [FromQuery] DateOnly month)
     {
-        if (!await CanManageGroup(groupId)) return Forbid();
+        if (!await CanViewGroup(groupId)) return Forbid();
         month = new DateOnly(month.Year, month.Month, 1);
         var group = await db.SalesGroups.Where(x => x.Id == groupId).Select(x => new { x.Id, x.Name, Leader = x.GroupLeader.FullName }).SingleOrDefaultAsync();
         if (group is null) return NotFound();
         var target = await db.SalesGroupTargets.Where(x => x.SalesGroupId == groupId && x.Month == month).Select(x => new { x.UnitTarget, x.CollectionTarget }).SingleOrDefaultAsync();
-        var teams = await db.SalesTeams.Where(x => x.SalesGroupId == groupId).Select(t => new
-        {
-            t.Id, t.Name, t.ParentTeamId, Leader = t.TeamLeader == null ? null : t.TeamLeader.FullName,
-            Target = db.SalesTeamTargets.Where(x => x.SalesTeamId == t.Id && x.Month == month).Select(x => new { x.UnitTarget, x.CollectionTarget }).FirstOrDefault(),
-            Members = db.Users.Where(u => u.SalesTeamId == t.Id).Select(u => new
-            {
-                u.Id, u.FullName, u.Designation,
-                Units = db.Customers.Count(c => c.BookedById == u.Id && c.BookedAt >= month.ToDateTime(TimeOnly.MinValue) && c.BookedAt < month.ToDateTime(TimeOnly.MinValue).AddMonths(1)),
-                Collection = db.MonthlyCollections.Where(c => c.SalesExecutiveId == u.Id && c.Month == month).Sum(c => (decimal?)c.Amount) ?? 0
-            })
-        }).ToListAsync();
-        return Ok(new { group, month, target, teams, totals = new { units = teams.Sum(t => t.Members.Sum(m => m.Units)), collection = teams.Sum(t => t.Members.Sum(m => m.Collection)) } });
+        var teamQuery = db.SalesTeams.Where(x => x.SalesGroupId == groupId);
+        if (User.IsInRole("SalesExecutive")) { var userId = User.UserId(); teamQuery = teamQuery.Where(x => x.TeamLeaderId == userId || x.ParentTeam != null && x.ParentTeam.TeamLeaderId == userId); }
+        var teamRows = await teamQuery.AsNoTracking().Include(x => x.TeamLeader).ToListAsync();
+        var teamIds = teamRows.Select(x => x.Id).ToList();
+        var memberRows = await db.Users.AsNoTracking().Where(x => x.SalesTeamId.HasValue && teamIds.Contains(x.SalesTeamId.Value)).Select(x => new { x.Id, x.FullName, x.Designation, x.SalesTeamId }).ToListAsync();
+        var memberIds = memberRows.Select(x => x.Id).ToList();
+        var start = month.ToDateTime(TimeOnly.MinValue); var end = start.AddMonths(1);
+        var wins = await db.Customers.Where(x => x.BookedById.HasValue && memberIds.Contains(x.BookedById.Value) && x.BookedAt >= start && x.BookedAt < end).GroupBy(x => x.BookedById!.Value).Select(x => new { UserId = x.Key, Count = x.Count() }).ToDictionaryAsync(x => x.UserId, x => x.Count);
+        var collections = await db.MonthlyCollections.Where(x => memberIds.Contains(x.SalesExecutiveId) && x.Month == month).GroupBy(x => x.SalesExecutiveId).Select(x => new { UserId = x.Key, Amount = x.Sum(y => y.Amount) }).ToDictionaryAsync(x => x.UserId, x => x.Amount);
+        var teamTargets = await db.SalesTeamTargets.Where(x => teamIds.Contains(x.SalesTeamId) && x.Month == month).ToDictionaryAsync(x => x.SalesTeamId);
+        var teams = teamRows.Select(t => new { t.Id, t.Name, t.ParentTeamId, Leader = t.TeamLeader?.FullName, Target = teamTargets.TryGetValue(t.Id, out var tt) ? new { tt.UnitTarget, tt.CollectionTarget } : null, Members = memberRows.Where(u => u.SalesTeamId == t.Id).Select(u => new { u.Id, u.FullName, u.Designation, Units = wins.GetValueOrDefault(u.Id), Collection = collections.GetValueOrDefault(u.Id) }).ToList() }).ToList();
+        return Ok(new { group, month, target, teams, totals = new { units = wins.Values.Sum(), collection = collections.Values.Sum() } });
     }
 
     private async Task<bool> CanManageGroup(int groupId) => User.IsInRole("SuperAdmin") || await db.SalesGroups.AnyAsync(x => x.Id == groupId && x.GroupLeaderId == User.UserId());
+    private async Task<bool> CanViewGroup(int groupId) => await CanManageGroup(groupId) || User.IsInRole("SalesExecutive") && await db.SalesTeams.AnyAsync(x => x.SalesGroupId == groupId && x.TeamLeaderId == User.UserId());
     private void Set(SalesGroupTarget row, TargetRequest request) { row.UnitTarget = request.UnitTarget; row.CollectionTarget = request.CollectionTarget; row.UpdatedById = User.UserId(); row.UpdatedAt = DateTime.UtcNow; }
     public record GroupRequest(string Name, int GroupLeaderId);
     public record TeamRequest(string Name, int SalesGroupId, int? ParentTeamId, int? TeamLeaderId);

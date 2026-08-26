@@ -28,6 +28,8 @@ public class AuthService(CrmDbContext db, JwtOptions options) : IAuthService
 
         var permissions = user.Role.Name == "SuperAdmin" ? new[] { "*" } : user.Role.RolePermissions.Select(x => x.Permission.Code)
             .Concat(user.UserPermissions.Select(x => x.Permission.Code)).Distinct().OrderBy(x => x).ToArray();
+        if (user.Role.Name == "SalesExecutive" && await db.SalesTeams.AnyAsync(x => x.TeamLeaderId == user.Id))
+            permissions = permissions.Append(PermissionCodes.ReportsView).Distinct().OrderBy(x => x).ToArray();
         return new AuthResponse(CreateToken(user), user.Id, user.FullName, user.Email, user.Role.Name, permissions);
     }
 
