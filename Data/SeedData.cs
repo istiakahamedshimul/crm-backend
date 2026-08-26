@@ -17,7 +17,7 @@ public static class SeedData
         if (legacyBrand is not null && brand is null) legacyBrand.Name = "BrandAndIT";
         else if (legacyBrand is not null && brand is not null)
             foreach (var user in db.Users.Where(x => x.RoleId == legacyBrand.Id)) user.RoleId = brand.Id;
-        var roleNames = new[] { "SuperAdmin", "SubAdmin", "SalesExecutive", "CA", "Transportation", "BrandAndIT" };
+        var roleNames = new[] { "SuperAdmin", "SubAdmin", "SalesExecutive", "GroupLeader", "CA", "Transportation", "BrandAndIT" };
         foreach (var roleName in roleNames)
         {
             if (!db.Roles.Any(x => x.Name == roleName))
@@ -58,6 +58,7 @@ public static class SeedData
         GrantDefaults("SubAdmin", PermissionCodes.CustomersView, PermissionCodes.ReportsView);
         GrantDefaults("BrandAndIT", PermissionCodes.LeadsManage, PermissionCodes.BookingsManage, PermissionCodes.CustomersView, PermissionCodes.NotificationsManage, PermissionCodes.ReportsView);
         GrantDefaults("SalesExecutive", PermissionCodes.CustomersView);
+        GrantDefaults("GroupLeader", PermissionCodes.UsersManage, PermissionCodes.ReportsView);
         db.SaveChanges();
 
         // Repair legacy Booked leads that predate automatic conversion. This is

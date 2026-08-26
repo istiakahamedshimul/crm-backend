@@ -31,6 +31,10 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options) : DbContext(op
     public DbSet<MonthlySalesTarget> MonthlySalesTargets => Set<MonthlySalesTarget>();
     public DbSet<MonthlyCollection> MonthlyCollections => Set<MonthlyCollection>();
     public DbSet<CustomerDue> CustomerDues => Set<CustomerDue>();
+    public DbSet<SalesGroup> SalesGroups => Set<SalesGroup>();
+    public DbSet<SalesTeam> SalesTeams => Set<SalesTeam>();
+    public DbSet<SalesGroupTarget> SalesGroupTargets => Set<SalesGroupTarget>();
+    public DbSet<SalesTeamTarget> SalesTeamTargets => Set<SalesTeamTarget>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -84,5 +88,19 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options) : DbContext(op
         modelBuilder.Entity<CustomerDue>().Property(x => x.Amount).HasPrecision(18, 2);
         modelBuilder.Entity<CustomerDue>().HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<CustomerDue>().HasOne(x => x.RecordedBy).WithMany().HasForeignKey(x => x.RecordedById).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<SalesGroup>().HasIndex(x => x.Name).IsUnique();
+        modelBuilder.Entity<SalesGroup>().HasIndex(x => x.GroupLeaderId).IsUnique();
+        modelBuilder.Entity<SalesGroup>().HasOne(x => x.GroupLeader).WithMany().HasForeignKey(x => x.GroupLeaderId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<SalesTeam>().HasIndex(x => new { x.SalesGroupId, x.Name }).IsUnique();
+        modelBuilder.Entity<SalesTeam>().HasOne(x => x.SalesGroup).WithMany().HasForeignKey(x => x.SalesGroupId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<SalesTeam>().HasOne(x => x.ParentTeam).WithMany().HasForeignKey(x => x.ParentTeamId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<SalesTeam>().HasOne(x => x.TeamLeader).WithMany().HasForeignKey(x => x.TeamLeaderId).OnDelete(DeleteBehavior.SetNull);
+        modelBuilder.Entity<User>().HasOne(x => x.SalesTeam).WithMany().HasForeignKey(x => x.SalesTeamId).OnDelete(DeleteBehavior.SetNull);
+        modelBuilder.Entity<SalesGroupTarget>().HasIndex(x => new { x.SalesGroupId, x.Month }).IsUnique();
+        modelBuilder.Entity<SalesGroupTarget>().Property(x => x.CollectionTarget).HasPrecision(18, 2);
+        modelBuilder.Entity<SalesGroupTarget>().HasOne(x => x.UpdatedBy).WithMany().HasForeignKey(x => x.UpdatedById).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<SalesTeamTarget>().HasIndex(x => new { x.SalesTeamId, x.Month }).IsUnique();
+        modelBuilder.Entity<SalesTeamTarget>().Property(x => x.CollectionTarget).HasPrecision(18, 2);
+        modelBuilder.Entity<SalesTeamTarget>().HasOne(x => x.UpdatedBy).WithMany().HasForeignKey(x => x.UpdatedById).OnDelete(DeleteBehavior.Restrict);
     }
 }
