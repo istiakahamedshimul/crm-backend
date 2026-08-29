@@ -11,4 +11,5 @@ public class MonthlyCollection
     public int RecordedById { get; set; }
     public User RecordedBy { get; set; } = null!;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

@@ -16,3 +16,4 @@ public enum FinancialAuditAction { AgreementCreated, AgreementUpdated, ScheduleG
 public enum PaymentPurpose { BookingAmount, DownPayment, EmiInstallment, FullPayment, Other }
 public enum CommissionStatus { Pending, Approved, Rejected, Paid, Hold }
 public enum VehicleBookingStatus { Pending, Approved, Rejected, Cancelled }
+public enum CustomerDueStatus { Unpaid, Paid, Cancelled }

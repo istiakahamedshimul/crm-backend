@@ -334,6 +334,8 @@ public class LeadsController(
         lead.ProjectId = request.ProjectId ?? lead.ProjectId;
         lead.NextFollowUpAt = request.NextFollowUpAt ?? lead.NextFollowUpAt;
         lead.Remarks = request.Remarks ?? lead.Remarks;
+        if (lead.Status != previousStatus) db.LeadStatusHistories.Add(new LeadStatusHistory { LeadId = lead.Id, FromStatus = previousStatus, ToStatus = lead.Status, ChangedById = User.UserId() });
+        if (lead.AssignedToId != previousAssignedToId) db.LeadAssignmentHistories.Add(new LeadAssignmentHistory { LeadId = lead.Id, FromSalesExecutiveId = previousAssignedToId, ToSalesExecutiveId = lead.AssignedToId, ChangedById = User.UserId(), Reason = "Admin reassignment" });
 
         var bookedCustomer = lead.Status == LeadStatus.Booked
             ? await db.Customers.FirstOrDefaultAsync(x => x.LeadId == lead.Id)
