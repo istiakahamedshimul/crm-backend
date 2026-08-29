@@ -12,7 +12,7 @@ public interface IReportingService { Task<IReadOnlyList<KpiResult>> KpisAsync(Re
 
 public sealed class ReportingService(CrmDbContext db) : IReportingService
 {
-    private static readonly LeadStatus[] ActiveStatuses = [LeadStatus.New, LeadStatus.Assigned, LeadStatus.Contacted, LeadStatus.Interested, LeadStatus.FollowUpNeeded, LeadStatus.SiteVisitScheduled, LeadStatus.Visited, LeadStatus.Negotiation, LeadStatus.InvoiceGenerated];
+    private static readonly LeadStatus[] ActiveStatuses = [LeadStatus.New, LeadStatus.Assigned, LeadStatus.Contacted, LeadStatus.Interested, LeadStatus.FollowUpNeeded, LeadStatus.SiteVisitScheduled, LeadStatus.Visited, LeadStatus.Negotiation];
 
     public async Task<IReadOnlyList<KpiResult>> KpisAsync(ReportingFilter f)
     {
@@ -36,7 +36,6 @@ public sealed class ReportingService(CrmDbContext db) : IReportingService
         var collections = await collectionsQuery.Where(x => x.Month >= prevMonthFrom && x.Month <= monthTo).ToListAsync(); var targets = await targetsQuery.Where(x => x.Month >= prevMonthFrom && x.Month <= monthTo).ToListAsync();
         var agreements = await db.FinancialAgreements.AsNoTracking().Where(x => !f.SalesExecutiveId.HasValue || x.Customer.AssignedToId == f.SalesExecutiveId).Select(x => new { x.TotalAgreedAmount, x.BookingAmount, x.DownPaymentAmount }).ToListAsync();
         var installments = await db.EmiInstallments.AsNoTracking().Where(x => !f.SalesExecutiveId.HasValue || x.FinancialAgreement.Customer.AssignedToId == f.SalesExecutiveId).Select(x => new { x.ExpectedAmount, x.PaidAmount, x.DueDate, x.Status }).ToListAsync();
-        var invoices = await db.Invoices.AsNoTracking().Where(x => x.CreatedAt >= previousFrom && x.CreatedAt < toExclusive && (!f.SalesExecutiveId.HasValue || x.SalesExecutiveId == f.SalesExecutiveId)).Select(x => new { x.FinalAmount, x.CreatedAt }).ToListAsync();
         var commissions = await db.Commissions.AsNoTracking().Where(x => x.CreatedAt >= previousFrom && x.CreatedAt < toExclusive && x.Status != CommissionStatus.Rejected && (!f.SalesExecutiveId.HasValue || x.SalesExecutiveId == f.SalesExecutiveId)).Select(x => new { x.Amount, x.CreatedAt }).ToListAsync();
         var workReports = await db.DailyWorkReports.AsNoTracking().Where(x => x.WorkDate >= DateOnly.FromDateTime(previousFrom) && x.WorkDate <= DateOnly.FromDateTime(f.To) && (!f.SalesExecutiveId.HasValue || x.SalesExecutiveId == f.SalesExecutiveId)).ToListAsync();
 
@@ -80,7 +79,6 @@ public sealed class ReportingService(CrmDbContext db) : IReportingService
             ("emi-default","EMI default rate",KpiFormulas.Rate(installments.Count(x=>x.DueDate.Date<now.Date&&x.PaidAmount<x.ExpectedAmount),installments.Count),0,5,"%","overdue installments / all installments × 100",true,false),
             ("average-collection-booking","Average collection per booking",KpiFormulas.Average(curCollection,curCustomers.Count),KpiFormulas.Average(prevCollection,prevCustomers.Count),0,"BDT","CA employee-month collection / bookings",false,false),
             ("average-booking-value","Average booking value",avgBooking,avgBooking,0,"BDT","total agreed sales value / booked customers",false,false),
-            ("average-invoice-value","Average invoice value",KpiFormulas.Average(invoices.Where(x=>Cur(x.CreatedAt)).Sum(x=>x.FinalAmount),invoices.Count(x=>Cur(x.CreatedAt))),KpiFormulas.Average(invoices.Where(x=>Prev(x.CreatedAt)).Sum(x=>x.FinalAmount),invoices.Count(x=>Prev(x.CreatedAt))),0,"BDT","invoice final value / invoices",false,false),
             ("commission-collection","Commission-to-collection ratio",KpiFormulas.Rate(commissions.Where(x=>Cur(x.CreatedAt)).Sum(x=>x.Amount),curCollection),KpiFormulas.Rate(commissions.Where(x=>Prev(x.CreatedAt)).Sum(x=>x.Amount),prevCollection),5,"%","valid commissions / CA employee-month collection × 100",true,false),
             ("employee-activity","Employee activity score",(KpiFormulas.Rate(curFollow.Count,Math.Max(1,curLeads.Count))+KpiFormulas.Rate(workReports.Count(x=>x.WorkDate>=DateOnly.FromDateTime(from)),executiveCount*workingDays))/2,0,85,"%","average of follow-up coverage and daily-report compliance",false,false),
             ("follow-up-proof","Follow-up proof compliance",KpiFormulas.Rate(curFollow.Count(x=>x.ProofCount>0),curFollow.Count),KpiFormulas.Rate(prevFollow.Count(x=>x.ProofCount>0),prevFollow.Count),90,"%","follow-ups with proof / follow-ups × 100",false,false),
