@@ -74,6 +74,7 @@ public class FollowUpsController(CrmDbContext db) : ControllerBase
         lead.Status = request.NewLeadStatus ?? lead.Status;
         lead.LastFollowUpAt = DateTime.UtcNow;
         lead.NextFollowUpAt = request.NextFollowUpAt;
+        if (lead.Status != previousStatus) db.LeadStatusHistories.Add(new LeadStatusHistory { LeadId = lead.Id, FromStatus = previousStatus, ToStatus = lead.Status, ChangedById = User.UserId() });
         if (lead.Status == LeadStatus.Booked && !await db.Customers.AnyAsync(x => x.LeadId == lead.Id))
         {
             db.Customers.Add(new Customer
