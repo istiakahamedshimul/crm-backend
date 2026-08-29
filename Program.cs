@@ -68,6 +68,7 @@ builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<IFinancialService, FinancialService>();
 builder.Services.AddScoped<ILeadAssignmentService, LeadAssignmentService>();
 builder.Services.AddScoped<IReportingService, ReportingService>();
+builder.Services.AddScoped<IOperationalReportService, OperationalReportService>();
 builder.Services.AddHostedService<LeadAutomationWorker>();
 builder.Services.AddHostedService<EmiDueWorker>();
 builder.Services.Configure<OneSignalOptions>(builder.Configuration.GetSection("OneSignal"));

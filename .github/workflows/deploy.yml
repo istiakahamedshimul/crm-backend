@@ -228,8 +228,8 @@ jobs:
             DOTNET_BUNDLE_EXTRACT_BASE_DIR=$BUNDLE_EXTRACT_DIRECTORY
             DOTNET_PRINT_TELEMETRY_MESSAGE=false
             DOTNET_CLI_TELEMETRY_OPTOUT=1
-            ConnectionStrings__Default=Server=localhost;Port=3306;Database=real_estate_crm;User=crmuser;Password=${{ secrets.SERVER_PASS }};AllowPublicKeyRetrieval=true;
-            ConnectionStrings__DefaultConnection=Server=localhost;Port=3306;Database=real_estate_crm;User=crmuser;Password=${{ secrets.SERVER_PASS }};AllowPublicKeyRetrieval=true;
+            ConnectionStrings__Default=Server=127.0.0.1;Port=3306;Database=real_estate_crm;User=crmuser;Password=${{ secrets.SERVER_PASS }};AllowPublicKeyRetrieval=true;
+            ConnectionStrings__DefaultConnection=Server=127.0.0.1;Port=3306;Database=real_estate_crm;User=crmuser;Password=${{ secrets.SERVER_PASS }};AllowPublicKeyRetrieval=true;
             Jwt__Issuer=RealEstateCrm
             Jwt__Audience=RealEstateCrmClients
             Jwt__Secret=$JWT_SECRET
@@ -294,10 +294,14 @@ jobs:
             run_sudo mysql -e "
               CREATE USER IF NOT EXISTS 'crmuser'@'localhost'
               IDENTIFIED BY '${{ secrets.SERVER_PASS }}';
+              CREATE USER IF NOT EXISTS 'crmuser'@'127.0.0.1'
+              IDENTIFIED BY '${{ secrets.SERVER_PASS }}';
             "
 
             run_sudo mysql -e "
               ALTER USER 'crmuser'@'localhost'
+              IDENTIFIED BY '${{ secrets.SERVER_PASS }}';
+              ALTER USER 'crmuser'@'127.0.0.1'
               IDENTIFIED BY '${{ secrets.SERVER_PASS }}';
             "
 
@@ -305,6 +309,9 @@ jobs:
               GRANT ALL PRIVILEGES
               ON real_estate_crm.*
               TO 'crmuser'@'localhost';
+              GRANT ALL PRIVILEGES
+              ON real_estate_crm.*
+              TO 'crmuser'@'127.0.0.1';
             "
 
             run_sudo mysql -e "FLUSH PRIVILEGES;"
