@@ -27,6 +27,22 @@ jobs:
         run: dotnet publish backend.csproj -c Release -r linux-x64 --self-contained true -o artifacts/backend
       - name: Package backend
         run: tar -czf backend.tar.gz -C artifacts/backend .
+      - name: Prepare encrypted-in-transit runtime secrets
+        env:
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          ONESIGNAL_APP_ID: ${{ secrets.ONESIGNAL__APPID }}
+          ONESIGNAL_API_KEY: ${{ secrets.ONESIGNAL__APIKEY }}
+        run: |
+          set -euo pipefail
+          test ${#JWT_SECRET} -ge 32
+          test -n "$ONESIGNAL_APP_ID"
+          test -n "$ONESIGNAL_API_KEY"
+          umask 077
+          {
+            printf 'JWT_SECRET_B64=%s\n' "$(printf '%s' "$JWT_SECRET" | base64 -w0)"
+            printf 'ONESIGNAL_APP_ID_B64=%s\n' "$(printf '%s' "$ONESIGNAL_APP_ID" | base64 -w0)"
+            printf 'ONESIGNAL_API_KEY_B64=%s\n' "$(printf '%s' "$ONESIGNAL_API_KEY" | base64 -w0)"
+          } > runtime-secrets.b64
       - name: Configure SSH
         env:
           SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
@@ -43,5 +59,5 @@ jobs:
         run: |
           test -n "$VPS_HOST" && test -n "$VPS_USER"
           ssh "$VPS_USER@$VPS_HOST" "mkdir -p incoming/backend-$GITHUB_SHA"
-          scp backend.tar.gz "$VPS_USER@$VPS_HOST:incoming/backend-$GITHUB_SHA/"
+          scp backend.tar.gz runtime-secrets.b64 "$VPS_USER@$VPS_HOST:incoming/backend-$GITHUB_SHA/"
           ssh "$VPS_USER@$VPS_HOST" "sudo /usr/local/sbin/crm-deploy-backend $GITHUB_SHA"
