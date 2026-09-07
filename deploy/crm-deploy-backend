@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+sha="${1:-}"
+[[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid Git commit SHA." >&2; exit 2; }
+
+incoming="/home/deployer/incoming/backend-$sha"
+archive="$incoming/backend.tar.gz"
+secrets_file="$incoming/runtime-secrets.b64"
+release="/opt/crm/backend-releases/$sha"
+runtime_env="/etc/crm/crm.env"
+
+test -f "$archive"
+test -f "$secrets_file"
+if tar -tzf "$archive" | grep -Eq '(^/|(^|/)\.\.(/|$))'; then echo "Unsafe archive." >&2; exit 3; fi
+[[ ! -e "$release" ]] || { echo "Release exists." >&2; exit 4; }
+
+declare -A encoded
+while IFS='=' read -r key value; do
+  case "$key" in JWT_SECRET_B64|ONESIGNAL_APP_ID_B64|ONESIGNAL_API_KEY_B64) encoded["$key"]="$value";; esac
+done < "$secrets_file"
+
+decode_required() {
+  local key="$1" value
+  value="$(printf '%s' "${encoded[$key]:-}" | base64 --decode)"
+  [[ -n "$value" && "$value" != *$'\n'* && "$value" != *$'\r'* ]] || { echo "$key is missing or invalid." >&2; exit 6; }
+  printf '%s' "$value"
+}
+
+jwt_secret="$(decode_required JWT_SECRET_B64)"
+onesignal_app_id="$(decode_required ONESIGNAL_APP_ID_B64)"
+onesignal_api_key="$(decode_required ONESIGNAL_API_KEY_B64)"
+[[ ${#jwt_secret} -ge 32 ]] || { echo "JWT_SECRET must contain at least 32 characters." >&2; exit 6; }
+
+update_runtime_env() {
+  local temporary
+  temporary="$(mktemp)"
+  grep -Ev '^(Jwt__Secret|OneSignal__AppId|OneSignal__ApiKey)=' "$runtime_env" > "$temporary" || true
+  {
+    printf 'Jwt__Secret=%s\n' "$jwt_secret"
+    printf 'OneSignal__AppId=%s\n' "$onesignal_app_id"
+    printf 'OneSignal__ApiKey=%s\n' "$onesignal_api_key"
+  } >> "$temporary"
+  install -o root -g crmapp -m 640 "$temporary" "$runtime_env"
+  rm -f "$temporary" "$secrets_file"
+}
+
+old="$(readlink -f /opt/crm/backend-current || true)"
+install -d -o root -g crmapp -m 750 "$release"
+tar -xzf "$archive" -C "$release"
+rm -rf "$release/wwwroot/uploads"
+ln -s /opt/crm/shared/uploads "$release/wwwroot/uploads"
+chown -R crmapp:crmapp "$release"
+find "$release" -type d -exec chmod 750 {} +
+find "$release" -type f -exec chmod 640 {} +
+chmod 750 "$release/backend"
+update_runtime_env
+ln -s "$release" /opt/crm/backend-current.new
+mv -Tf /opt/crm/backend-current.new /opt/crm/backend-current
+systemctl restart crm-api
+for _ in {1..30}; do
+  if curl -fsS --max-time 2 http://127.0.0.1:5090/health >/dev/null; then rm -rf "$incoming"; echo "Backend deployed: $sha"; exit 0; fi
+  sleep 1
+done
+if [[ "$old" == /opt/crm/* && -d "$old" ]]; then ln -s "$old" /opt/crm/backend-current.rollback; mv -Tf /opt/crm/backend-current.rollback /opt/crm/backend-current; systemctl restart crm-api; fi
+echo "Backend health failed; rolled back." >&2
+exit 5
