@@ -1,0 +1,47 @@
+name: Deploy CRM API production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: crm-api-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      - name: Test
+        run: dotnet test tests/backend.Tests/backend.Tests.csproj -c Release
+      - name: Publish API
+        run: dotnet publish backend.csproj -c Release -r linux-x64 --self-contained true -o artifacts/backend
+      - name: Package backend
+        run: tar -czf backend.tar.gz -C artifacts/backend .
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Upload and activate
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          test -n "$VPS_HOST" && test -n "$VPS_USER"
+          ssh "$VPS_USER@$VPS_HOST" "mkdir -p incoming/backend-$GITHUB_SHA"
+          scp backend.tar.gz "$VPS_USER@$VPS_HOST:incoming/backend-$GITHUB_SHA/"
+          ssh "$VPS_USER@$VPS_HOST" "sudo /usr/local/sbin/crm-deploy-backend $GITHUB_SHA"
