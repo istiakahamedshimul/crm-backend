@@ -75,6 +75,30 @@ public class LocationsController(CrmDbContext db) : ControllerBase
         return Ok(new { enabled = user.LocationTrackingEnabled, changedAtUtc = user.LocationTrackingChangedAtUtc });
     }
 
+    [HttpPut("tracking-status/{employeeId:int}")]
+    [backend.Security.RequirePermission(PermissionCodes.LeadsManage)]
+    public async Task<ActionResult> SetEmployeeTrackingStatus(int employeeId, TrackingStatusRequest request)
+    {
+        var user = await db.Users.Include(x => x.Role)
+            .SingleOrDefaultAsync(x => x.Id == employeeId && x.IsActive);
+        if (user is null || user.Role.Name != "SalesExecutive")
+            return NotFound(new { message = "Sales employee not found." });
+
+        if (user.LocationTrackingEnabled != request.Enabled || user.LocationTrackingChangedAtUtc is null)
+        {
+            user.LocationTrackingEnabled = request.Enabled;
+            user.LocationTrackingChangedAtUtc = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+        }
+
+        return Ok(new
+        {
+            employeeId = user.Id,
+            trackingEnabled = user.LocationTrackingEnabled,
+            trackingChangedAtUtc = user.LocationTrackingChangedAtUtc
+        });
+    }
+
     [HttpGet("live")]
     [backend.Security.RequirePermission(PermissionCodes.LeadsManage)]
     public async Task<ActionResult> Live()
