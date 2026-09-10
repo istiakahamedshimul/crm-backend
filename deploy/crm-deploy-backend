@@ -47,6 +47,7 @@ update_runtime_env() {
 
 old="$(readlink -f /opt/crm/backend-current || true)"
 install -d -o root -g crmapp -m 750 "$release"
+install -d -o crmapp -g crmapp -m 750 /var/backups/crm
 tar -xzf "$archive" -C "$release"
 rm -rf "$release/wwwroot/uploads"
 ln -s /opt/crm/shared/uploads "$release/wwwroot/uploads"
