@@ -16,7 +16,9 @@ if tar -tzf "$archive" | grep -Eq '(^/|(^|/)\.\.(/|$))'; then echo "Unsafe archi
 [[ ! -e "$release" ]] || { echo "Release exists." >&2; exit 4; }
 
 declare -A encoded
-while IFS='=' read -r key value; do
+while IFS= read -r line; do
+  key="${line%%=*}"
+  value="${line#*=}"
   case "$key" in JWT_SECRET_B64|ONESIGNAL_APP_ID_B64|ONESIGNAL_API_KEY_B64) encoded["$key"]="$value";; esac
 done < "$secrets_file"
 
@@ -54,7 +56,9 @@ if command -v setfacl >/dev/null 2>&1 && [[ -d /opt/crm/frontend-releases ]]; th
 fi
 tar -xzf "$archive" -C "$release"
 install -d -o root -g root -m 755 /etc/systemd/system/crm-api.service.d
-install -o root -g root -m 644 "$release/deploy/crm-api-backups.conf" /etc/systemd/system/crm-api.service.d/backups.conf
+printf '[Service]\nReadWritePaths=/var/backups/crm\n' > /etc/systemd/system/crm-api.service.d/backups.conf
+chown root:root /etc/systemd/system/crm-api.service.d/backups.conf
+chmod 644 /etc/systemd/system/crm-api.service.d/backups.conf
 systemctl daemon-reload
 rm -rf "$release/wwwroot/uploads"
 ln -s /opt/crm/shared/uploads "$release/wwwroot/uploads"
