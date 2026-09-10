@@ -48,7 +48,14 @@ update_runtime_env() {
 old="$(readlink -f /opt/crm/backend-current || true)"
 install -d -o root -g crmapp -m 750 "$release"
 install -d -o crmapp -g crmapp -m 750 /var/backups/crm
+if command -v setfacl >/dev/null 2>&1 && [[ -d /opt/crm/frontend-releases ]]; then
+  setfacl -Rm u:crmapp:rX /opt/crm/frontend-releases
+  setfacl -m d:u:crmapp:rX /opt/crm/frontend-releases
+fi
 tar -xzf "$archive" -C "$release"
+install -d -o root -g root -m 755 /etc/systemd/system/crm-api.service.d
+install -o root -g root -m 644 "$release/deploy/crm-api-backups.conf" /etc/systemd/system/crm-api.service.d/backups.conf
+systemctl daemon-reload
 rm -rf "$release/wwwroot/uploads"
 ln -s /opt/crm/shared/uploads "$release/wwwroot/uploads"
 chown -R crmapp:crmapp "$release"
