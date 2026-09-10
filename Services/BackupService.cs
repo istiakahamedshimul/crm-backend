@@ -247,6 +247,8 @@ public sealed class BackupService(
             if (File.GetLastWriteTimeUtc(file) < cutoff) TryDelete(file);
         foreach (var item in jobs.Where(x => x.Value.Type == "Instant" && x.Value.ExpiresAtUtc <= DateTime.UtcNow).ToArray())
             jobs.TryRemove(item.Key, out _);
+        foreach (var item in jobs.Where(x => x.Value.Status == "Failed" && x.Value.CompletedAtUtc < DateTime.UtcNow.AddHours(-24)).ToArray())
+            jobs.TryRemove(item.Key, out _);
     }
 
     private void EnsureDirectory() => Directory.CreateDirectory(options.Directory);
