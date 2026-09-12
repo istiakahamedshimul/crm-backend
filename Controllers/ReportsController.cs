@@ -10,8 +10,8 @@ namespace backend.Controllers;
 [backend.Security.RequirePermission(PermissionCodes.ReportsView)]
 public class ReportsController(CrmDbContext db) : ControllerBase
 {
-    [HttpGet("employee-kpis")]
-    public async Task<ActionResult> EmployeeKpis([FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null, [FromQuery] int? salesExecutiveId = null)
+    [HttpGet("workspace")]
+    public async Task<ActionResult> Workspace([FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null, [FromQuery] int? salesExecutiveId = null, [FromQuery] int? projectId = null)
     {
         var today = DateTime.UtcNow.Date;
         var start = (from ?? new DateTime(today.Year, today.Month, 1)).Date;
@@ -29,29 +29,65 @@ public class ReportsController(CrmDbContext db) : ControllerBase
         }
         if (salesExecutiveId.HasValue) employeeQuery = employeeQuery.Where(x => x.Id == salesExecutiveId.Value);
 
-        var employees = await employeeQuery.OrderBy(x => x.FullName).Select(x => new { x.Id, x.FullName, x.IsActive }).ToListAsync();
+        var employees = await employeeQuery.OrderBy(x => x.FullName).Select(x => new { x.Id, x.FullName, x.IsActive, Team = x.SalesTeam == null ? "Unassigned" : x.SalesTeam.Name }).ToListAsync();
         var employeeIds = employees.Select(x => x.Id).ToArray();
         var endExclusive = finish.AddDays(1);
         var monthFrom = new DateOnly(start.Year, start.Month, 1);
         var monthTo = new DateOnly(finish.Year, finish.Month, 1);
 
-        var won = await db.LeadStatusHistories.AsNoTracking()
-            .Where(x => x.ChangedAt >= start && x.ChangedAt < endExclusive && x.ToStatus == LeadStatus.Booked && x.Lead.AssignedToId.HasValue && employeeIds.Contains(x.Lead.AssignedToId.Value))
-            .GroupBy(x => x.Lead.AssignedToId!.Value).Select(x => new { EmployeeId = x.Key, Count = x.Select(v => v.LeadId).Distinct().Count() }).ToDictionaryAsync(x => x.EmployeeId, x => x.Count);
-        var lost = await db.LeadStatusHistories.AsNoTracking()
-            .Where(x => x.ChangedAt >= start && x.ChangedAt < endExclusive && (x.ToStatus == LeadStatus.Lost || x.ToStatus == LeadStatus.NotInterested) && x.Lead.AssignedToId.HasValue && employeeIds.Contains(x.Lead.AssignedToId.Value))
-            .GroupBy(x => x.Lead.AssignedToId!.Value).Select(x => new { EmployeeId = x.Key, Count = x.Select(v => v.LeadId).Distinct().Count() }).ToDictionaryAsync(x => x.EmployeeId, x => x.Count);
-        var returned = await db.LeadReturns.AsNoTracking()
-            .Where(x => x.ReturnedAt >= start && x.ReturnedAt < endExclusive && employeeIds.Contains(x.SalesExecutiveId))
-            .GroupBy(x => x.SalesExecutiveId).Select(x => new { EmployeeId = x.Key, Count = x.Count() }).ToDictionaryAsync(x => x.EmployeeId, x => x.Count);
-        var collections = await db.MonthlyCollections.AsNoTracking()
-            .Where(x => x.Month >= monthFrom && x.Month <= monthTo && employeeIds.Contains(x.SalesExecutiveId))
-            .GroupBy(x => x.SalesExecutiveId).Select(x => new { EmployeeId = x.Key, Amount = x.Sum(v => v.Amount) }).ToDictionaryAsync(x => x.EmployeeId, x => x.Amount);
-        var salesUnits = await db.Customers.AsNoTracking()
-            .Where(x => x.BookedAt >= start && x.BookedAt < endExclusive && x.BookedById.HasValue && employeeIds.Contains(x.BookedById.Value))
-            .GroupBy(x => x.BookedById!.Value).Select(x => new { EmployeeId = x.Key, Count = x.Count() }).ToDictionaryAsync(x => x.EmployeeId, x => x.Count);
+        var leadQuery = db.Leads.AsNoTracking().Where(x => x.CreatedAt >= start && x.CreatedAt < endExclusive);
+        if (salesExecutiveId.HasValue) leadQuery = leadQuery.Where(x => x.AssignedToId == salesExecutiveId);
+        if (projectId.HasValue) leadQuery = leadQuery.Where(x => x.ProjectId == projectId);
+        var leads = await leadQuery.Select(x => new { x.Id, x.Status, x.AssignedToId, x.ProjectId, x.NextFollowUpAt }).ToListAsync();
 
-        var rows = employees.Select(x => new { employeeId = x.Id, employee = x.FullName, active = x.IsActive, won = won.GetValueOrDefault(x.Id), lost = lost.GetValueOrDefault(x.Id), returned = returned.GetValueOrDefault(x.Id), collections = collections.GetValueOrDefault(x.Id), salesUnits = salesUnits.GetValueOrDefault(x.Id) }).ToList();
-        return Ok(new { from = start, to = finish, generatedAt = DateTime.UtcNow, rows, definitions = new { won = "Distinct leads moved to Booked during the selected period.", lost = "Distinct leads moved to Lost or Not Interested during the selected period.", returned = "Leads returned from the employee after the response deadline; this is the primary service KPI.", collections = "Employee monthly collection totals for every month touched by the selected period.", salesUnits = "Customer bookings credited to the employee during the selected period." } });
+        var outcomeQuery = db.LeadStatusHistories.AsNoTracking().Where(x => x.ChangedAt >= start && x.ChangedAt < endExclusive && employeeIds.Contains(x.ChangedById));
+        if (projectId.HasValue) outcomeQuery = outcomeQuery.Where(x => x.Lead.ProjectId == projectId);
+        var outcomes = await outcomeQuery.Where(x => x.ToStatus == LeadStatus.Booked || x.ToStatus == LeadStatus.Lost || x.ToStatus == LeadStatus.NotInterested)
+            .Select(x => new { x.LeadId, x.ChangedById, x.ToStatus, x.Lead.ProjectId }).ToListAsync();
+
+        var bookingQuery = db.Customers.AsNoTracking().Where(x => x.BookedAt >= start && x.BookedAt < endExclusive && x.BookedById.HasValue && employeeIds.Contains(x.BookedById.Value));
+        if (projectId.HasValue) bookingQuery = bookingQuery.Where(x => x.ProjectId == projectId);
+        var bookings = await bookingQuery.Select(x => new { x.Id, x.LeadId, EmployeeId = x.BookedById!.Value, x.ProjectId, Project = x.Project == null ? "No project" : x.Project.Name, AgreedValue = x.FinancialAgreement == null ? 0 : x.FinancialAgreement.TotalAgreedAmount }).ToListAsync();
+
+        var returnQuery = db.LeadReturns.AsNoTracking().Where(x => x.ReturnedAt >= start && x.ReturnedAt < endExclusive && employeeIds.Contains(x.SalesExecutiveId));
+        if (projectId.HasValue) returnQuery = returnQuery.Where(x => x.Lead.ProjectId == projectId);
+        var returns = await returnQuery.OrderByDescending(x => x.ReturnedAt).Select(x => new { x.Id, x.LeadId, Lead = x.Lead.CustomerName, EmployeeId = x.SalesExecutiveId, Employee = x.SalesExecutive.FullName, Project = x.Lead.Project == null ? "No project" : x.Lead.Project.Name, x.AssignedAt, x.ReturnedAt, x.NotificationCount, Status = x.Lead.Status.ToString(), CurrentEmployee = x.Lead.AssignedTo == null ? "Unassigned" : x.Lead.AssignedTo.FullName }).ToListAsync();
+
+        var collectionQuery = db.MonthlyCollections.AsNoTracking().Where(x => x.Month >= monthFrom && x.Month <= monthTo && employeeIds.Contains(x.SalesExecutiveId));
+        var collections = await collectionQuery.Select(x => new { EmployeeId = x.SalesExecutiveId, Employee = x.SalesExecutive.FullName, x.Month, x.Amount }).ToListAsync();
+        var targets = await db.MonthlySalesTargets.AsNoTracking().Where(x => x.Month >= monthFrom && x.Month <= monthTo && employeeIds.Contains(x.SalesExecutiveId)).Select(x => new { EmployeeId = x.SalesExecutiveId, x.Month, x.MinimumSalesUnits, x.MinimumCollectionAmount }).ToListAsync();
+        var assigned = await db.LeadAssignmentHistories.AsNoTracking().Where(x => x.ChangedAt >= start && x.ChangedAt < endExclusive && x.ToSalesExecutiveId.HasValue && employeeIds.Contains(x.ToSalesExecutiveId.Value)).GroupBy(x => x.ToSalesExecutiveId!.Value).Select(x => new { EmployeeId = x.Key, Count = x.Select(v => v.LeadId).Distinct().Count() }).ToDictionaryAsync(x => x.EmployeeId, x => x.Count);
+        var followed = await db.FollowUps.AsNoTracking().Where(x => x.CreatedAt >= start && x.CreatedAt < endExclusive && employeeIds.Contains(x.CreatedById)).GroupBy(x => x.CreatedById).Select(x => new { EmployeeId = x.Key, Count = x.Select(v => v.LeadId).Distinct().Count() }).ToDictionaryAsync(x => x.EmployeeId, x => x.Count);
+
+        static decimal Rate(decimal value, decimal total) => total <= 0 ? 0 : Math.Round(value / total * 100, 2);
+        static decimal Cap(decimal value) => Math.Min(100, Math.Max(0, value));
+        var kpis = employees.Select(employee =>
+        {
+            var won = bookings.Where(x => x.EmployeeId == employee.Id && x.LeadId.HasValue).Select(x => x.LeadId).Distinct().Count();
+            var lost = outcomes.Where(x => x.ChangedById == employee.Id && (x.ToStatus == LeadStatus.Lost || x.ToStatus == LeadStatus.NotInterested)).Select(x => x.LeadId).Distinct().Count();
+            var returned = returns.Count(x => x.EmployeeId == employee.Id);
+            var assignedCount = assigned.GetValueOrDefault(employee.Id);
+            var units = bookings.Count(x => x.EmployeeId == employee.Id);
+            var collected = collections.Where(x => x.EmployeeId == employee.Id).Sum(x => x.Amount);
+            var unitTarget = targets.Where(x => x.EmployeeId == employee.Id).Sum(x => x.MinimumSalesUnits);
+            var collectionTarget = targets.Where(x => x.EmployeeId == employee.Id).Sum(x => x.MinimumCollectionAmount);
+            var responseScore = assignedCount == 0 ? 0 : Cap(100 - Rate(returned, assignedCount));
+            var salesScore = unitTarget == 0 ? (units > 0 ? 100 : 0) : Cap(Rate(units, unitTarget));
+            var collectionScore = collectionTarget == 0 ? (collected > 0 ? 100 : 0) : Cap(Rate(collected, collectionTarget));
+            var winScore = Rate(won, won + lost);
+            var followupScore = assignedCount == 0 ? 0 : Cap(Rate(followed.GetValueOrDefault(employee.Id), assignedCount));
+            var score = Math.Round(responseScore * .30m + salesScore * .25m + collectionScore * .20m + winScore * .15m + followupScore * .10m, 2);
+            var rating = score >= 85 ? "Excellent" : score >= 70 ? "Good" : score >= 50 ? "Needs improvement" : "Critical";
+            return new { employeeId = employee.Id, employee = employee.FullName, employee.Team, active = employee.IsActive, score, rating, won, lost, returned, returnedRate = Rate(returned, assignedCount), collections = collected, collectionTarget, collectionAchievement = collectionScore, salesUnits = units, salesTarget = unitTarget, salesAchievement = salesScore, winRate = winScore, followupCoverage = followupScore, assignedLeads = assignedCount };
+        }).OrderByDescending(x => x.score).ToList();
+
+        var activeStatuses = new[] { LeadStatus.New, LeadStatus.Assigned, LeadStatus.Contacted, LeadStatus.Interested, LeadStatus.FollowUpNeeded, LeadStatus.SiteVisitScheduled, LeadStatus.Visited, LeadStatus.Negotiation };
+        var leadSummary = new[] { new { totalLeads = leads.Count, newLeads = leads.Count(x => x.Status == LeadStatus.New), assigned = leads.Count(x => x.AssignedToId.HasValue), unassigned = leads.Count(x => !x.AssignedToId.HasValue), active = leads.Count(x => activeStatuses.Contains(x.Status)), won = bookings.Where(x => x.LeadId.HasValue).Select(x => x.LeadId).Distinct().Count(), lost = outcomes.Where(x => x.ToStatus == LeadStatus.Lost || x.ToStatus == LeadStatus.NotInterested).Select(x => x.LeadId).Distinct().Count(), returned = returns.Count, awaitingFollowUp = leads.Count(x => x.NextFollowUpAt.HasValue && x.NextFollowUpAt < endExclusive) } };
+        var salesSummary = bookings.GroupBy(x => new { x.EmployeeId, x.ProjectId, x.Project }).Select(g => new { employee = employees.First(x => x.Id == g.Key.EmployeeId).FullName, project = g.Key.Project, salesUnits = g.Count(), agreedSalesValue = g.Sum(x => x.AgreedValue), won = g.Where(x => x.LeadId.HasValue).Select(x => x.LeadId).Distinct().Count(), lost = outcomes.Where(x => x.ChangedById == g.Key.EmployeeId && x.ProjectId == g.Key.ProjectId && (x.ToStatus == LeadStatus.Lost || x.ToStatus == LeadStatus.NotInterested)).Select(x => x.LeadId).Distinct().Count() }).OrderByDescending(x => x.salesUnits).ToList();
+        var collectionKeys = collections.Select(x => new { x.EmployeeId, x.Month }).Concat(targets.Select(x => new { x.EmployeeId, x.Month })).Distinct().ToList();
+        var collectionSummary = collectionKeys.Select(key => { var target = targets.Where(x => x.EmployeeId == key.EmployeeId && x.Month == key.Month).Sum(x => x.MinimumCollectionAmount); var amount = collections.Where(x => x.EmployeeId == key.EmployeeId && x.Month == key.Month).Sum(x => x.Amount); return new { employee = employees.First(x => x.Id == key.EmployeeId).FullName, month = key.Month, target, collected = amount, variance = amount - target, achievement = Rate(amount, target) }; }).OrderByDescending(x => x.month).ThenBy(x => x.employee).ToList();
+        var projectSummary = (await db.Projects.AsNoTracking().Where(x => !projectId.HasValue || x.Id == projectId).Select(x => new { x.Id, x.Name }).ToListAsync()).Select(project => new { project = project.Name, leadsReceived = leads.Count(x => x.ProjectId == project.Id), won = bookings.Where(x => x.ProjectId == project.Id && x.LeadId.HasValue).Select(x => x.LeadId).Distinct().Count(), lost = outcomes.Where(x => x.ProjectId == project.Id && (x.ToStatus == LeadStatus.Lost || x.ToStatus == LeadStatus.NotInterested)).Select(x => x.LeadId).Distinct().Count(), salesUnits = bookings.Count(x => x.ProjectId == project.Id), collectionAmount = bookings.Where(x => x.ProjectId == project.Id).Sum(x => x.AgreedValue) }).Where(x => x.leadsReceived > 0 || x.won > 0 || x.lost > 0 || x.salesUnits > 0).OrderByDescending(x => x.salesUnits).ToList();
+
+        return Ok(new { from = start, to = finish, generatedAt = DateTime.UtcNow, kpis, leadSummary, salesSummary, collectionSummary, returnedLeads = returns, projectSummary, formula = new { score = "Response discipline × 30% + sales achievement × 25% + collection achievement × 20% + win rate × 15% + follow-up coverage × 10%", responseDiscipline = "100 − (returned leads ÷ assigned leads × 100)", salesAchievement = "sales units ÷ sales-unit target × 100", collectionAchievement = "collections ÷ collection target × 100", winRate = "won ÷ (won + lost) × 100", followupCoverage = "distinct assigned leads followed up ÷ assigned leads × 100", note = "Component scores are capped at 100%. Returned leads have the highest individual weight." } });
     }
 }
