@@ -67,8 +67,6 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<IFinancialService, FinancialService>();
 builder.Services.AddScoped<ILeadAssignmentService, LeadAssignmentService>();
-builder.Services.AddScoped<IReportingService, ReportingService>();
-builder.Services.AddScoped<IOperationalReportService, OperationalReportService>();
 builder.Services.Configure<BackupOptions>(builder.Configuration.GetSection("Backup"));
 builder.Services.AddSingleton<BackupService>();
 builder.Services.AddSingleton<IBackupService>(sp => sp.GetRequiredService<BackupService>());

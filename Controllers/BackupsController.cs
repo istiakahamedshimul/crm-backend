@@ -23,10 +23,19 @@ public sealed class BackupsController(IBackupService backups) : ControllerBase
     }
 
     [HttpGet("{id}/download")]
-    public ActionResult Download(string id)
+    [AllowAnonymous]
+    public ActionResult Download(string id, [FromQuery] string? token)
     {
-        var path = backups.GetDownloadPath(id);
+        var path = string.IsNullOrWhiteSpace(token) ? null : backups.ValidateDownloadToken(id, token);
         if (path is null || !System.IO.File.Exists(path)) return NotFound(new { message = "Backup is unavailable or has expired." });
         return PhysicalFile(path, "application/gzip", Path.GetFileName(path), enableRangeProcessing: true);
+    }
+
+    [HttpPost("{id}/download-link")]
+    public ActionResult DownloadLink(string id)
+    {
+        var result = backups.IssueDownloadToken(id);
+        if (result is null) return NotFound(new { message = "Backup is unavailable or has expired." });
+        return Ok(new { token = result.Value.Token, expiresAtUtc = result.Value.ExpiresAtUtc });
     }
 }

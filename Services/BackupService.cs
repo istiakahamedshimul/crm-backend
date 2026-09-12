@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Threading.Channels;
 using backend.Options;
 using Microsoft.Extensions.Options;
@@ -16,6 +17,8 @@ public interface IBackupService
     BackupInfo QueueInstant();
     IReadOnlyCollection<BackupInfo> List();
     string? GetDownloadPath(string id);
+    (string Token, DateTime ExpiresAtUtc)? IssueDownloadToken(string id);
+    string? ValidateDownloadToken(string id, string token);
 }
 
 public sealed class BackupService(
@@ -27,6 +30,7 @@ public sealed class BackupService(
     private readonly BackupOptions options = configuredOptions.Value;
     private readonly Channel<(string Id, string Type)> queue = Channel.CreateUnbounded<(string, string)>();
     private readonly ConcurrentDictionary<string, BackupInfo> jobs = new();
+    private readonly ConcurrentDictionary<string, (string BackupId, DateTime ExpiresAtUtc)> downloadTokens = new();
     private readonly SemaphoreSlim backupLock = new(1, 1);
 
     public BackupInfo QueueInstant()
@@ -60,6 +64,25 @@ public sealed class BackupService(
         if (string.IsNullOrWhiteSpace(id) || id.Any(c => !char.IsLetterOrDigit(c) && c != '-')) return null;
         CleanupExpired();
         return Directory.EnumerateFiles(options.Directory, $"crm-*-{id}.tar.gz").SingleOrDefault();
+    }
+
+    public (string Token, DateTime ExpiresAtUtc)? IssueDownloadToken(string id)
+    {
+        if (GetDownloadPath(id) is null) return null;
+        CleanupDownloadTokens();
+        var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+            .TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        var expiry = DateTime.UtcNow.AddMinutes(2);
+        downloadTokens[token] = (id, expiry);
+        return (token, expiry);
+    }
+
+    public string? ValidateDownloadToken(string id, string token)
+    {
+        CleanupDownloadTokens();
+        if (!downloadTokens.TryGetValue(token, out var entry) || entry.BackupId != id || entry.ExpiresAtUtc < DateTime.UtcNow)
+            return null;
+        return GetDownloadPath(id);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -249,6 +272,13 @@ public sealed class BackupService(
             jobs.TryRemove(item.Key, out _);
         foreach (var item in jobs.Where(x => x.Value.Status == "Failed" && x.Value.CompletedAtUtc < DateTime.UtcNow.AddHours(-24)).ToArray())
             jobs.TryRemove(item.Key, out _);
+        CleanupDownloadTokens();
+    }
+
+    private void CleanupDownloadTokens()
+    {
+        foreach (var item in downloadTokens.Where(x => x.Value.ExpiresAtUtc < DateTime.UtcNow).ToArray())
+            downloadTokens.TryRemove(item.Key, out _);
     }
 
     private void EnsureDirectory() => Directory.CreateDirectory(options.Directory);

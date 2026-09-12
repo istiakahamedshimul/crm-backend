@@ -31,17 +31,5 @@ public class DailyWorkReportsController(CrmDbContext db) : ControllerBase
     [HttpGet("mine"), Authorize(Roles = "SalesExecutive")]
     public async Task<ActionResult> Mine() => Ok(await db.DailyWorkReports.Where(x => x.SalesExecutiveId == User.UserId()).OrderByDescending(x => x.WorkDate).Take(30).Select(x => new { x.Id, x.WorkDate, x.Summary, x.InputLanguage, x.UpdatedAt }).ToListAsync());
 
-    [HttpGet, backend.Security.RequirePermission(PermissionCodes.ReportsView)]
-    public async Task<ActionResult> Get([FromQuery] DateOnly? from = null, [FromQuery] DateOnly? to = null, [FromQuery] int? salesExecutiveId = null)
-    {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(6)); var start = from ?? today; var end = to ?? today;
-        if (start > end) return BadRequest(new { message = "Start date cannot be after end date." });
-        var query = db.DailyWorkReports.AsNoTracking().Where(x => x.WorkDate >= start && x.WorkDate <= end);
-        if (User.IsInRole("GroupLeader")) query = query.Where(x => x.SalesExecutive.SalesTeam != null && x.SalesExecutive.SalesTeam.SalesGroup.GroupLeaderId == User.UserId());
-        if (salesExecutiveId.HasValue) query = query.Where(x => x.SalesExecutiveId == salesExecutiveId);
-        var items = await query.OrderByDescending(x => x.WorkDate).ThenBy(x => x.SalesExecutive.FullName).Select(x => new { x.Id, x.WorkDate, x.SalesExecutiveId, salesExecutive = x.SalesExecutive.FullName, x.Summary, x.InputLanguage, x.CreatedAt, x.UpdatedAt }).ToListAsync();
-        return Ok(new { items, from = start, to = end, total = items.Count });
-    }
-
     public record SubmitRequest(DateOnly? WorkDate, string Summary, string? InputLanguage);
 }

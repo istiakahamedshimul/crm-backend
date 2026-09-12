@@ -71,4 +71,4 @@ jobs:
           }
           retry ssh "${SSH_OPTIONS[@]}" "$VPS_USER@$VPS_HOST" "mkdir -p incoming/backend-$GITHUB_SHA"
           retry scp "${SSH_OPTIONS[@]}" backend.tar.gz runtime-secrets.b64 "$VPS_USER@$VPS_HOST:incoming/backend-$GITHUB_SHA/"
-          retry ssh "${SSH_OPTIONS[@]}" "$VPS_USER@$VPS_HOST" "sudo /usr/local/sbin/crm-deploy-backend $GITHUB_SHA"
+          ssh "${SSH_OPTIONS[@]}" "$VPS_USER@$VPS_HOST" "sudo /usr/local/sbin/crm-deploy-backend $GITHUB_SHA"
